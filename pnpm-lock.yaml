@@ -182,6 +182,22 @@ importers:
         specifier: 'catalog:'
         version: 1.4.0(@types/node@26.6.6)(@vitest/ui@5.0.5)(typescript@7.0.2)
 
+  apps/api:
+    dependencies:
+      '@backslash/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.6
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vite-plus:
+        specifier: 'catalog:'
+        version: 1.4.0(@types/node@26.6.6)(@vitest/ui@5.0.5)(typescript@7.0.2)
+
   apps/website:
     devDependencies:
       typescript:
@@ -194,7 +210,7 @@ importers:
         specifier: 'catalog:'
         version: 1.4.0(@types/node@26.6.6)(@vitest/ui@5.0.5)(typescript@7.0.2)
 
-  packages/utils:
+  packages/shared:
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
