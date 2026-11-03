@@ -12,6 +12,10 @@
   "dependencies": {
     "@backslash/shared": "workspace:*",
     "@base-ui/react": "catalog:",
+    "@codemirror/commands": "catalog:",
+    "@codemirror/language": "catalog:",
+    "@codemirror/state": "catalog:",
+    "@codemirror/view": "catalog:",
     "@fontsource-variable/geist": "catalog:",
     "@hugeicons/core-free-icons": "catalog:",
     "@hugeicons/react": "catalog:",
@@ -23,6 +27,7 @@
     "pdfjs-dist": "catalog:",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-resizable-panels": "catalog:",
     "shadcn": "catalog:",
     "tailwindcss": "catalog:",
     "tw-animate-css": "catalog:"

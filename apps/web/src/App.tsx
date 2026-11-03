@@ -1,14 +1,29 @@
 import { useState } from "react";
-import { Button } from "./components/ui/button";
+import { LatexEditor } from "@/components/latex-editor";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { PdfViewer } from "@/components/pdf-viewer";
+
+const INITIAL_SOURCE = String.raw`\documentclass{article}
+\begin{document}
+Hello, \LaTeX!
+\end{document}
+`;
 
 function App() {
-  const [clicks, setClicks] = useState(0);
+  const [source, setSource] = useState(INITIAL_SOURCE);
 
   return (
-    <>
-      <h1>Hello!</h1>
-      <Button onClick={() => setClicks((prev) => prev + 1)}>{clicks}</Button>
-    </>
+    <ResizablePanelGroup orientation="horizontal">
+      <ResizablePanel>
+        <div className="h-screen">
+          <LatexEditor value={source} onChange={setSource} className="h-full" />
+        </div>
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel>
+        <PdfViewer url="/sample.pdf" className="h-screen overflow-auto bg-muted p-4" />
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }
 
