@@ -31,7 +31,11 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@backslash/shared": "workspace:*"
+    "@backslash/shared": "workspace:*",
+    "@fastify/cors": "catalog:",
+    "bullmq": "catalog:",
+    "fastify": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

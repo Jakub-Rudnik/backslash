@@ -5,11 +5,34 @@
   "type": "module",
   "scripts": {
     "dev": "vp dev",
-    "build": "tsc && vp build",
+    "build": "tsc -b && vp build",
+    "lint": "vp lint",
     "preview": "vp preview"
   },
+  "dependencies": {
+    "@backslash/shared": "workspace:*",
+    "@base-ui/react": "catalog:",
+    "@fontsource-variable/geist": "catalog:",
+    "@hugeicons/core-free-icons": "catalog:",
+    "@hugeicons/react": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "class-variance-authority": "catalog:",
+    "cn": "catalog:",
+    "codemirror": "catalog:",
+    "codemirror-lang-latex": "catalog:",
+    "pdfjs-dist": "catalog:",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "shadcn": "catalog:",
+    "tailwindcss": "catalog:",
+    "tw-animate-css": "catalog:"
+  },
   "devDependencies": {
-    "typescript": "^7.0.2",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "~7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   }
