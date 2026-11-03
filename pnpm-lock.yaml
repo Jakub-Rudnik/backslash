@@ -227,6 +227,9 @@ catalogs:
     tw-animate-css:
       specifier: ^1.4.0
       version: 1.4.0
+    typescript:
+      specifier: ^7.0.2
+      version: 7.0.2
     vite:
       specifier: npm:@voidzero-dev/vite-plus-core@1.4.0
       version: 1.4.0
@@ -365,12 +368,13 @@ importers:
         version: 1.4.0(@types/node@24.19.2)(@vitest/ui@5.0.5)(jiti@2.7.0)(typescript@7.0.2)
 
   packages/shared:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
-      '@types/node':
-        specifier: ^26.6.5
-        version: 26.6.6
       typescript:
-        specifier: ^7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
       vite-plus:
         specifier: 'catalog:'
