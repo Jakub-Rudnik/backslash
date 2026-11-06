@@ -20,6 +20,7 @@
     "@hugeicons/core-free-icons": "catalog:",
     "@hugeicons/react": "catalog:",
     "@tailwindcss/vite": "catalog:",
+    "@tanstack/react-query": "catalog:",
     "class-variance-authority": "catalog:",
     "cn": "catalog:",
     "codemirror": "catalog:",
