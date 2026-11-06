@@ -28,13 +28,15 @@
     "dev": "vpx --watch src/index.ts",
     "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp run build"
+    "prepublishOnly": "vp run build",
+    "start": "node dist/index.mjs"
   },
   "dependencies": {
     "@backslash/shared": "workspace:*",
     "@fastify/cors": "catalog:",
     "bullmq": "catalog:",
     "fastify": "catalog:",
+    "iovalkey": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
