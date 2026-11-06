@@ -1,0 +1,24 @@
+{
+  "name": "compiler",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vpx --watch src/index.ts",
+    "start": "node dist/index.mjs",
+    "test": "vp test",
+    "check": "vp check"
+  },
+  "dependencies": {
+    "@backslash/shared": "workspace:*",
+    "bullmq": "catalog:",
+    "iovalkey": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vite-plus": "catalog:"
+  }
+}
