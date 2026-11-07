@@ -2,11 +2,13 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { PlayIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CompileStatus } from "@/components/compile-status";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { LatexEditor } from "@/components/latex-editor";
 import { PdfViewer } from "@/components/pdf-viewer";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useCompile } from "@/hooks/use-compile";
+import { useTheme } from "@/hooks/use-theme";
 
 const INITIAL_SOURCE = String.raw`\documentclass{article}
 \begin{document}
@@ -17,6 +19,7 @@ Hello, \LaTeX!
 function App() {
   const [source, setSource] = useState(INITIAL_SOURCE);
   const { run, pdfUrl, result, isPending, error } = useCompile();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const compileNow = useEffectEvent(() => run(source));
 
@@ -44,7 +47,10 @@ function App() {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b px-3 text-sm">
-        <span className="font-heading font-semibold">backslash</span>
+        <a href="/" className="flex items-center gap-2">
+          <img src="/favicon.svg?v=2" alt="" className="size-6" />
+          <span className="font-heading font-semibold">backslash</span>
+        </a>
         <Button size="sm" onClick={() => run(source)} disabled={isPending}>
           <HugeiconsIcon icon={PlayIcon} data-icon="inline-start" />
           Compile
@@ -52,10 +58,16 @@ function App() {
         <div className="min-w-0 flex-1">
           <CompileStatus isPending={isPending} result={result} error={error} />
         </div>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} />
       </header>
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel>
-          <LatexEditor value={source} onChange={setSource} className="h-full" />
+          <LatexEditor
+            value={source}
+            onChange={setSource}
+            dark={theme === "dark"}
+            className="h-full"
+          />
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel>

@@ -15,6 +15,7 @@
     "@codemirror/commands": "catalog:",
     "@codemirror/language": "catalog:",
     "@codemirror/state": "catalog:",
+    "@codemirror/theme-one-dark": "catalog:",
     "@codemirror/view": "catalog:",
     "@fontsource-variable/geist": "catalog:",
     "@hugeicons/core-free-icons": "catalog:",
