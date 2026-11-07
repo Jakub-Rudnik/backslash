@@ -1,0 +1,26 @@
+{
+  "name": "collab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vpx --watch src/index.ts",
+    "start": "node dist/index.mjs",
+    "test": "vp test",
+    "check": "vp check"
+  },
+  "dependencies": {
+    "@backslash/shared": "workspace:*",
+    "@hocuspocus/extension-database": "catalog:",
+    "@hocuspocus/server": "catalog:",
+    "y-protocols": "catalog:",
+    "yjs": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}
