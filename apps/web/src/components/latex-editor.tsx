@@ -1,14 +1,43 @@
 import { useEffect, useRef } from "react";
-import { syntaxHighlighting } from "@codemirror/language";
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap,
+} from "@codemirror/autocomplete";
+import { defaultKeymap } from "@codemirror/commands";
+import {
+  bracketMatching,
+  defaultHighlightStyle,
+  foldGutter,
+  foldKeymap,
+  indentOnInput,
+  syntaxHighlighting,
+} from "@codemirror/language";
+import { lintKeymap } from "@codemirror/lint";
+import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { Compartment, EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
-import { basicSetup } from "codemirror";
-import { latex } from "codemirror-lang-latex";
 import { oneDarkHighlightStyle } from "@codemirror/theme-one-dark";
+import {
+  crosshairCursor,
+  drawSelection,
+  dropCursor,
+  EditorView,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
+  keymap,
+  lineNumbers,
+  rectangularSelection,
+} from "@codemirror/view";
+import { latex } from "codemirror-lang-latex";
+import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
+import * as Y from "yjs";
+import type { HocuspocusProvider } from "@hocuspocus/provider";
 
 type LatexEditorProps = {
-  value: string;
-  onChange?: (value: string) => void;
+  ytext: Y.Text;
+  awareness: HocuspocusProvider["awareness"];
   className?: string;
   dark?: boolean;
 };
@@ -47,50 +76,68 @@ function themeExtensions(dark: boolean) {
     : [];
 }
 
-export function LatexEditor({ value, onChange, className, dark = false }: LatexEditorProps) {
+// codemirror's basicSetup minus history(): undo/redo is handled by Y.UndoManager
+// (only undoes your own changes, not collaborators')
+const setup = [
+  lineNumbers(),
+  highlightActiveLineGutter(),
+  highlightSpecialChars(),
+  foldGutter(),
+  drawSelection(),
+  dropCursor(),
+  EditorState.allowMultipleSelections.of(true),
+  indentOnInput(),
+  syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+  bracketMatching(),
+  closeBrackets(),
+  autocompletion(),
+  rectangularSelection(),
+  crosshairCursor(),
+  highlightActiveLine(),
+  highlightSelectionMatches(),
+  keymap.of([
+    ...yUndoManagerKeymap,
+    ...closeBracketsKeymap,
+    ...defaultKeymap,
+    ...searchKeymap,
+    ...foldKeymap,
+    ...completionKeymap,
+    ...lintKeymap,
+  ]),
+];
+
+export function LatexEditor({ ytext, awareness, className, dark = false }: LatexEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const themeCompartment = useRef(new Compartment());
-  const onChangeRef = useRef(onChange);
+  const darkRef = useRef(dark);
 
   useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-
-  useEffect(() => {
+    const undoManager = new Y.UndoManager(ytext);
     const view = new EditorView({
       parent: containerRef.current!,
       state: EditorState.create({
-        doc: value,
+        doc: ytext.toJSON(),
         extensions: [
-          basicSetup,
+          setup,
           latex(),
           fullHeight,
           appTheme,
-          themeCompartment.current.of(themeExtensions(dark)),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) onChangeRef.current?.(update.state.doc.toString());
-          }),
+          themeCompartment.current.of(themeExtensions(darkRef.current)),
+          yCollab(ytext, awareness, { undoManager }),
         ],
       }),
     });
     viewRef.current = view;
     return () => {
       view.destroy();
+      undoManager.destroy();
       viewRef.current = null;
     };
-  }, []);
+  }, [ytext, awareness]);
 
   useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
-    const current = view.state.doc.toString();
-    if (value !== current) {
-      view.dispatch({ changes: { from: 0, to: current.length, insert: value } });
-    }
-  }, [value]);
-
-  useEffect(() => {
+    darkRef.current = dark;
     viewRef.current?.dispatch({
       effects: themeCompartment.current.reconfigure(themeExtensions(dark)),
     });
