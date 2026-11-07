@@ -1,6 +1,10 @@
-# Vite+ Monorepo Starter
+<p align="center">
+  <img src=".github/assets/logo.svg" width="96" height="96" alt="backslash logo" />
+</p>
 
-A starter for creating a Vite+ monorepo.
+<h1 align="center">backslash</h1>
+
+<p align="center">LaTeX editor in the browser.</p>
 
 ## Development
 
