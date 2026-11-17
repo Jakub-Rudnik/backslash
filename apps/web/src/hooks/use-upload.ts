@@ -20,7 +20,7 @@ type Item = { path: string; data: Blob };
 const PARALLEL = 4;
 
 /** Text files become collaborative text, unless they aren't valid UTF-8 (then a blob). */
-async function toContent({ path, data }: Item): Promise<FileContent> {
+async function toContent(projectId: string, { path, data }: Item): Promise<FileContent> {
   if (isTextPath(path) && data.size <= MAX_FILE_SIZE) {
     try {
       const text = new TextDecoder("utf-8", { fatal: true }).decode(await data.arrayBuffer());
@@ -32,7 +32,7 @@ async function toContent({ path, data }: Item): Promise<FileContent> {
   if (data.size > MAX_BLOB_SIZE) {
     throw new Error(`too large (${formatSize(data.size)}, max ${formatSize(MAX_BLOB_SIZE)})`);
   }
-  return uploadBlob(data);
+  return uploadBlob(projectId, data);
 }
 
 async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
@@ -99,7 +99,11 @@ async function prepare(raw: RawUpload[], dir: string, existing: Set<string>, fai
  * Zips are extracted. Existing files at the same path are replaced after confirmation.
  * One upload at a time.
  */
-export function useUpload(project: ProjectFiles, onUploaded?: (fileId: string) => void) {
+export function useUpload(
+  projectId: string,
+  project: ProjectFiles,
+  onUploaded?: (fileId: string) => void,
+) {
   const [pending, setPending] = useState<{ items: Item[]; replacing: string[] } | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
@@ -123,7 +127,7 @@ export function useUpload(project: ProjectFiles, onUploaded?: (fileId: string) =
     try {
       await mapLimit(items, PARALLEL, async (item) => {
         try {
-          const content = await toContent(item);
+          const content = await toContent(projectId, item);
           ids.push(project.upsert(item.path, content));
         } catch (err) {
           failed.push(`${item.path}: ${message(err)}`);

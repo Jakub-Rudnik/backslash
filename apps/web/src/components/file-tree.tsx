@@ -46,6 +46,8 @@ import { fromDataTransfer, fromFileList } from "@/lib/upload-sources";
 type FileTreeProps = {
   project: ProjectFiles;
   upload: ReturnType<typeof useUpload>;
+  /** viewers: browse and download only */
+  readOnly?: boolean;
   onDownloadZip: () => void;
   activeId: string | null;
   peers: Peer[];
@@ -179,6 +181,7 @@ function dirOf(path: string) {
 export function FileTree({
   project,
   upload,
+  readOnly = false,
   onDownloadZip,
   activeId,
   peers,
@@ -189,8 +192,11 @@ export function FileTree({
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadDir = useRef("");
-  const [editing, setEditing] = useState<Editing | null>(null);
-  const [deleting, setDeleting] = useState<Deleting | null>(null);
+  // pending edits/deletes are dropped when we become read-only (role changed while open)
+  const [editingState, setEditing] = useState<Editing | null>(null);
+  const [deletingState, setDeleting] = useState<Deleting | null>(null);
+  const editing = readOnly ? null : editingState;
+  const deleting = readOnly ? null : deletingState;
   const tree = buildTree(project.files);
   const mainPath = project.files.find((f) => f.id === project.mainId)?.path ?? null;
 
@@ -211,7 +217,9 @@ export function FileTree({
 
   function onDrop(e: DragEvent) {
     if (!hasFiles(e)) return;
+    // always cancel, or the browser opens the dropped file instead of the project
     e.preventDefault();
+    if (readOnly) return;
     setDragging(false);
     // dropped on a folder row -> into it, on a file row -> next to it, elsewhere -> root
     const target = (e.target as HTMLElement).closest<HTMLElement>("[data-dir]");
@@ -232,6 +240,7 @@ export function FileTree({
 
   // actions validate first, so they only throw on a race with another client
   function attempt(validate: () => string | null, run: () => void): string | null {
+    if (readOnly) return "Read-only";
     const error = validate();
     if (error) return error;
     try {
@@ -244,7 +253,7 @@ export function FileTree({
   }
 
   function confirmDelete() {
-    if (!deleting) return;
+    if (!deleting || readOnly) return;
     if (deleting.kind === "file") project.remove(deleting.id);
     else project.removeFolder(deleting.path);
     setDeleting(null);
@@ -308,31 +317,33 @@ export function FileTree({
             <HugeiconsIcon icon={Folder01Icon} className="size-4 shrink-0 text-muted-foreground" />
             <span className="truncate">{node.name}</span>
           </button>
-          <RowMenu>
-            <DropdownMenuItem onClick={() => startCreate(node.path)}>
-              <HugeiconsIcon icon={FileAddIcon} />
-              New file here
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={upload.busy} onClick={() => pickFiles(node.path)}>
-              <HugeiconsIcon icon={Upload04Icon} />
-              Upload here
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => setEditing({ kind: "rename-folder", path: node.path })}
-            >
-              <HugeiconsIcon icon={PencilEdit01Icon} />
-              Rename / move
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={hasMain}
-              title={hasMain ? "Contains the main file" : undefined}
-              onClick={() => setDeleting({ kind: "folder", path: node.path })}
-            >
-              <HugeiconsIcon icon={Delete02Icon} />
-              Delete folder
-            </DropdownMenuItem>
-          </RowMenu>
+          {!readOnly && (
+            <RowMenu>
+              <DropdownMenuItem onClick={() => startCreate(node.path)}>
+                <HugeiconsIcon icon={FileAddIcon} />
+                New file here
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={upload.busy} onClick={() => pickFiles(node.path)}>
+                <HugeiconsIcon icon={Upload04Icon} />
+                Upload here
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setEditing({ kind: "rename-folder", path: node.path })}
+              >
+                <HugeiconsIcon icon={PencilEdit01Icon} />
+                Rename / move
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={hasMain}
+                title={hasMain ? "Contains the main file" : undefined}
+                onClick={() => setDeleting({ kind: "folder", path: node.path })}
+              >
+                <HugeiconsIcon icon={Delete02Icon} />
+                Delete folder
+              </DropdownMenuItem>
+            </RowMenu>
+          )}
         </div>
         {open && (
           <>
@@ -399,29 +410,31 @@ export function FileTree({
             ))}
           </span>
         </button>
-        <RowMenu>
-          <DropdownMenuItem
-            onClick={() => setEditing({ kind: "rename-file", id: file.id, path: file.path })}
-          >
-            <HugeiconsIcon icon={PencilEdit01Icon} />
-            Rename / move
-          </DropdownMenuItem>
-          {isTexFile(file.path) && !isMain && (
-            <DropdownMenuItem onClick={() => project.setMain(file.id)}>
-              <HugeiconsIcon icon={StarIcon} />
-              Set as main file
+        {!readOnly && (
+          <RowMenu>
+            <DropdownMenuItem
+              onClick={() => setEditing({ kind: "rename-file", id: file.id, path: file.path })}
+            >
+              <HugeiconsIcon icon={PencilEdit01Icon} />
+              Rename / move
             </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            variant="destructive"
-            disabled={isMain}
-            title={isMain ? "Choose another main file first" : undefined}
-            onClick={() => setDeleting({ kind: "file", id: file.id, path: file.path })}
-          >
-            <HugeiconsIcon icon={Delete02Icon} />
-            Delete
-          </DropdownMenuItem>
-        </RowMenu>
+            {isTexFile(file.path) && !isMain && (
+              <DropdownMenuItem onClick={() => project.setMain(file.id)}>
+                <HugeiconsIcon icon={StarIcon} />
+                Set as main file
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              variant="destructive"
+              disabled={isMain}
+              title={isMain ? "Choose another main file first" : undefined}
+              onClick={() => setDeleting({ kind: "file", id: file.id, path: file.path })}
+            >
+              <HugeiconsIcon icon={Delete02Icon} />
+              Delete
+            </DropdownMenuItem>
+          </RowMenu>
+        )}
       </div>
     );
   }
@@ -432,25 +445,29 @@ export function FileTree({
         <span className="mr-auto text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Files
         </span>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="New file"
-          title="New file (use / for folders)"
-          onClick={() => startCreate("")}
-        >
-          <HugeiconsIcon icon={FileAddIcon} />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Upload files"
-          title="Upload files or a .zip (or drop them here)"
-          disabled={upload.busy}
-          onClick={() => pickFiles("")}
-        >
-          <HugeiconsIcon icon={Upload04Icon} />
-        </Button>
+        {!readOnly && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="New file"
+              title="New file (use / for folders)"
+              onClick={() => startCreate("")}
+            >
+              <HugeiconsIcon icon={FileAddIcon} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Upload files"
+              title="Upload files or a .zip (or drop them here)"
+              disabled={upload.busy}
+              onClick={() => pickFiles("")}
+            >
+              <HugeiconsIcon icon={Upload04Icon} />
+            </Button>
+          </>
+        )}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -482,7 +499,8 @@ export function FileTree({
         onDragOver={(e) => {
           if (!hasFiles(e)) return;
           e.preventDefault();
-          e.dataTransfer.dropEffect = "copy";
+          e.dataTransfer.dropEffect = readOnly ? "none" : "copy";
+          if (readOnly) return;
           setDragging(true);
         }}
         onDragLeave={(e) => {
@@ -493,7 +511,9 @@ export function FileTree({
         {renderCreate("", 0)}
         {renderNodes(tree, 0)}
         {project.files.length === 0 && !editing && (
-          <p className="p-3 text-xs text-muted-foreground">No files yet. Drop files here.</p>
+          <p className="p-3 text-xs text-muted-foreground">
+            No files yet.{!readOnly && " Drop files here."}
+          </p>
         )}
       </div>
 
@@ -528,7 +548,7 @@ export function FileTree({
       )}
 
       <AlertDialog
-        open={upload.replacing !== null}
+        open={!readOnly && upload.replacing !== null}
         onOpenChange={(open) => !open && upload.cancel()}
       >
         <AlertDialogContent size="sm">

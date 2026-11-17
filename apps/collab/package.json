@@ -11,9 +11,12 @@
     "check": "vp check"
   },
   "dependencies": {
+    "@backslash/db": "workspace:*",
     "@backslash/shared": "workspace:*",
     "@hocuspocus/extension-database": "catalog:",
     "@hocuspocus/server": "catalog:",
+    "drizzle-orm": "catalog:",
+    "iovalkey": "catalog:",
     "y-protocols": "catalog:",
     "yjs": "catalog:",
     "zod": "catalog:"

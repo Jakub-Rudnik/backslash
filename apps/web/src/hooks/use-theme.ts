@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 export type Theme = "light" | "dark";
 
@@ -23,33 +23,37 @@ function apply(theme: Theme) {
   document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
+// one shared store: the header toggle and the editor must agree
+let current: Theme = resolve();
+const listeners = new Set<() => void>();
+
+function set(theme: Theme) {
+  current = theme;
+  apply(theme);
+  for (const l of listeners) l();
+}
+
+// follow the OS setting until the user picks a theme explicitly
+media.addEventListener("change", () => {
+  if (!readStored()) set(resolve());
+});
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function toggle() {
+  const next = current === "dark" ? "light" : "dark";
+  try {
+    localStorage.setItem(STORAGE_KEY, next);
+  } catch {
+    // storage unavailable; theme still applies for this session
+  }
+  set(next);
+}
+
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(resolve);
-
-  useEffect(() => {
-    apply(theme);
-  }, [theme]);
-
-  // follow the OS setting until the user picks a theme explicitly
-  useEffect(() => {
-    const onChange = () => {
-      if (!readStored()) setTheme(resolve());
-    };
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
-
-  const toggle = useCallback(() => {
-    setTheme((current) => {
-      const next = current === "dark" ? "light" : "dark";
-      try {
-        localStorage.setItem(STORAGE_KEY, next);
-      } catch {
-        // storage unavailable; theme still applies for this session
-      }
-      return next;
-    });
-  }, []);
-
+  const theme = useSyncExternalStore(subscribe, () => current);
   return { theme, toggle };
 }

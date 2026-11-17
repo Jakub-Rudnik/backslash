@@ -7,7 +7,6 @@ type CollabStatusProps = {
   status: WebSocketStatus;
   me: CollabUser;
   peers: Peer[];
-  onRename: (name: string) => void;
 };
 
 const MAX_AVATARS = 5;
@@ -38,18 +37,17 @@ function Avatar({
   );
 }
 
-export function CollabStatus({ status, me, peers, onRename }: CollabStatusProps) {
+export function CollabStatus({ status, me, peers: all }: CollabStatusProps) {
+  // one avatar per person (several tabs share one), not ourselves
+  const peers = all.filter(
+    (p, i) => p.user.id !== me.id && all.findIndex((q) => q.user.id === p.user.id) === i,
+  );
   const label =
     status === WebSocketStatus.Connected
       ? "Connected"
       : status === WebSocketStatus.Connecting
         ? "Connecting…"
         : "Offline, changes will sync on reconnect";
-
-  function rename() {
-    const name = window.prompt("Your name (visible to collaborators)", me.name)?.trim();
-    if (name) onRename(name.slice(0, 40));
-  }
 
   return (
     <div className="flex items-center gap-2">
@@ -74,24 +72,18 @@ export function CollabStatus({ status, me, peers, onRename }: CollabStatusProps)
           </span>
         )}
       </div>
-      <button
-        type="button"
-        onClick={rename}
-        title={`You: ${me.name} · ${label}\nClick to rename`}
-        aria-label={`You: ${me.name}. Rename`}
-        className="relative cursor-pointer rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-      >
-        <Avatar user={me} title="" className="ring-2 ring-foreground/70" />
-        <span
-          aria-hidden
-          className={cn(
-            "absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-background",
-            status === WebSocketStatus.Connected && "bg-emerald-500",
-            status === WebSocketStatus.Connecting && "animate-pulse bg-amber-500",
-            status === WebSocketStatus.Disconnected && "bg-destructive",
-          )}
-        />
-      </button>
+      {/* our own avatar is the account menu; here just the connection state */}
+      <span
+        role="status"
+        title={label}
+        aria-label={label}
+        className={cn(
+          "size-2.5 rounded-full",
+          status === WebSocketStatus.Connected && "bg-emerald-500",
+          status === WebSocketStatus.Connecting && "animate-pulse bg-amber-500",
+          status === WebSocketStatus.Disconnected && "bg-destructive",
+        )}
+      />
     </div>
   );
 }

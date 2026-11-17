@@ -1,55 +1,61 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { compile, CompileTimeoutError, getPdfpath, MissingBlobError } from "./compile.service.ts";
-import { CompileRequest, MAX_PROJECT_SIZE } from "@backslash/shared";
-import * as z from "zod";
-import { stat } from "node:fs/promises";
+import type { Db } from "@backslash/db";
+import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import * as z from "zod";
+import { requireProject } from "../../lib/access.ts";
+import { CompileTimeoutError, type CompileBackend } from "./compile.backend.ts";
+import { buildCompileRequest, CompileInputError } from "./compile.service.ts";
+import type { SnapshotSource } from "./snapshots.ts";
 
-async function compileHandler(req: FastifyRequest, reply: FastifyReply) {
-  const parsed = CompileRequest.safeParse(req.body);
+export type CompileRoutesOptions = {
+  db: Db;
+  backend: CompileBackend;
+  snapshots: SnapshotSource;
+  blobDir: string;
+};
 
-  if (!parsed.success) {
-    return reply.code(400).send({ error: z.flattenError(parsed.error) });
-  }
+const PdfParams = z.object({ jobId: z.uuid() });
 
-  try {
-    return await compile(parsed.data);
-  } catch (err) {
-    if (err instanceof MissingBlobError) {
-      return reply.code(400).send({ error: err.message });
+export async function compileRoutes(
+  app: FastifyInstance,
+  { db, backend, snapshots, blobDir }: CompileRoutesOptions,
+) {
+  // viewers may compile too (read-only), they just can't publish the result to the doc
+  app.post("/projects/:id/compile", async (req, reply) => {
+    const access = await requireProject(db, req, reply, "viewer");
+    if (!access) return reply;
+    try {
+      const request = await buildCompileRequest(db, snapshots, blobDir, access.projectId);
+      return await backend.run(access.projectId, request);
+    } catch (err) {
+      if (err instanceof CompileInputError) return reply.code(400).send({ error: err.message });
+      if (err instanceof CompileTimeoutError) {
+        return reply.code(504).send({ error: "Compilation timed out" });
+      }
+      throw err;
     }
-    if (err instanceof CompileTimeoutError) {
-      return reply.code(504).send({ error: "Compilation timed out" });
+  });
+
+  app.get("/projects/:id/compile/:jobId/pdf", async (req, reply) => {
+    const access = await requireProject(db, req, reply, "viewer");
+    if (!access) return reply;
+    const params = PdfParams.safeParse(req.params);
+    if (!params.success) return reply.code(400).send({ error: "Invalid job id" });
+    const { jobId } = params.data;
+    // the job must belong to this project, else any member could read any PDF by job id
+    if ((await backend.projectOf(jobId)) !== access.projectId) {
+      return reply.code(404).send({ error: "PDF not found" });
     }
-    throw err;
-  }
-}
-
-const PdfParams = z.object({ id: z.uuid() });
-
-async function pdfHandler(req: FastifyRequest, reply: FastifyReply) {
-  const parsed = PdfParams.safeParse(req.params);
-
-  if (!parsed.success) {
-    return reply.code(400).send({ error: "Invalid job id" });
-  }
-
-  const pdfPath = getPdfpath(parsed.data.id);
-
-  try {
-    await stat(pdfPath);
-  } catch {
-    return reply.code(404).send({ error: "PDF not found" });
-  }
-
-  return reply
-    .type("application/pdf")
-    .header("Cache-Control", "no-store")
-    .send(createReadStream(pdfPath));
-}
-
-export async function compileRoutes(app: FastifyInstance) {
-  // projects are up to MAX_PROJECT_SIZE chars; JSON escaping and multi-byte chars add overhead
-  app.post("/", { bodyLimit: 4 * MAX_PROJECT_SIZE }, compileHandler);
-  app.get("/:id/pdf", pdfHandler);
+    const pdfPath = backend.pdfPath(jobId);
+    try {
+      await stat(pdfPath);
+    } catch {
+      return reply.code(404).send({ error: "PDF not found" });
+    }
+    return reply
+      .type("application/pdf")
+      .header("Cache-Control", "private, no-store")
+      .send(createReadStream(pdfPath));
+  });
 }

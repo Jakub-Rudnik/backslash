@@ -8,6 +8,20 @@
 
 ## Development
 
+- Start Postgres and Valkey:
+
+```bash
+docker compose up -d
+```
+
+- Configure the apps: copy `.env.example` to `.env` in `apps/api`, `apps/collab` and `apps/compiler`. `BETTER_AUTH_SECRET` and `INTERNAL_SECRET` must be the same in `api` and `collab` (`openssl rand -base64 32`). GitHub login is optional: set `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` (callback URL `<PUBLIC_URL>/api/auth/callback/github`). Migrations run on startup.
+
+- API tests use a separate database:
+
+```bash
+docker compose exec postgres psql -U backslash -c "create database backslash_test"
+```
+
 - Check everything is ready:
 
 ```bash

@@ -49,8 +49,6 @@ const CompileRequest = z
     }
   });
 
-const CompileJobData = CompileRequest;
-
 const CompileError = z.object({
   /** project-relative path, null when the error is outside the project files */
   file: FilePath.nullable(),
@@ -90,15 +88,16 @@ type UploadedBlob = z.infer<typeof UploadedBlob>;
 type CompileRequest = z.infer<typeof CompileRequest>;
 type CompileError = z.infer<typeof CompileError>;
 type CompileResult = z.infer<typeof CompileResult>;
-type CompileJobData = z.infer<typeof CompileJobData>;
+/** queue payload: the request plus the project it belongs to (for PDF access checks) */
+type CompileJobData = CompileRequest & { projectId: string };
 type SharedBuild = z.infer<typeof SharedBuild>;
 
+export type { CompileJobData };
 export {
   BlobFile,
   BlobHash,
   COMPILE_QUEUE,
   CompileError,
-  CompileJobData,
   CompileRequest,
   CompileResult,
   DEFAULT_SOURCE,
@@ -114,3 +113,4 @@ export {
   UploadedBlob,
 };
 export * from "./paths.ts";
+export * from "./api.ts";

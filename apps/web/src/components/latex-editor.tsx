@@ -46,6 +46,7 @@ type LatexEditorProps = {
   path: string;
   /** scroll to and select this line */
   reveal?: Reveal | null;
+  readOnly?: boolean;
   awareness: HocuspocusProvider["awareness"];
   className?: string;
   dark?: boolean;
@@ -125,6 +126,7 @@ export function LatexEditor({
   ytext,
   path,
   reveal,
+  readOnly = false,
   awareness,
   className,
   dark = false,
@@ -135,6 +137,8 @@ export function LatexEditor({
   const darkRef = useRef(dark);
   const languageCompartment = useRef(new Compartment());
   const pathRef = useRef(path);
+  const readOnlyCompartment = useRef(new Compartment());
+  const readOnlyRef = useRef(readOnly);
 
   useEffect(() => {
     const undoManager = new Y.UndoManager(ytext);
@@ -145,6 +149,7 @@ export function LatexEditor({
         extensions: [
           setup,
           languageCompartment.current.of(languageFor(pathRef.current)),
+          readOnlyCompartment.current.of(EditorState.readOnly.of(readOnlyRef.current)),
           fullHeight,
           appTheme,
           themeCompartment.current.of(themeExtensions(darkRef.current)),
@@ -159,6 +164,13 @@ export function LatexEditor({
       viewRef.current = null;
     };
   }, [ytext, awareness]);
+
+  useEffect(() => {
+    readOnlyRef.current = readOnly;
+    viewRef.current?.dispatch({
+      effects: readOnlyCompartment.current.reconfigure(EditorState.readOnly.of(readOnly)),
+    });
+  }, [readOnly]);
 
   // renames (by anyone) can change the extension without remounting
   useEffect(() => {

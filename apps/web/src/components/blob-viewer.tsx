@@ -26,12 +26,20 @@ function useObjectUrl(blob: Blob | undefined) {
 }
 
 /** Preview of an uploaded (non-text) file: images, PDFs, otherwise just info + download. */
-export function BlobViewer({ file, className }: { file: DocBlobFile; className?: string }) {
+export function BlobViewer({
+  projectId,
+  file,
+  className,
+}: {
+  projectId: string;
+  file: DocBlobFile;
+  className?: string;
+}) {
   const type = previewType(file.path);
   const name = file.path.slice(file.path.lastIndexOf("/") + 1);
   const { data, error } = useQuery({
-    queryKey: ["blob", file.hash, type],
-    queryFn: () => fetchBlob(file.hash, type ?? ""),
+    queryKey: ["blob", projectId, file.hash, type],
+    queryFn: () => fetchBlob(projectId, file.hash, type ?? ""),
     enabled: type !== null,
     // content-addressed, never changes
     staleTime: Infinity,
@@ -44,7 +52,7 @@ export function BlobViewer({ file, className }: { file: DocBlobFile; className?:
       <span className="min-w-0 truncate font-mono text-xs">{file.path}</span>
       <span className="shrink-0 text-xs text-muted-foreground">{formatSize(file.size)}</span>
       <a
-        href={blobUrl(file.hash)}
+        href={blobUrl(projectId, file.hash)}
         download={name}
         className={cn(buttonVariants({ variant: "outline", size: "xs" }), "ml-auto")}
       >

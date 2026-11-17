@@ -1,6 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import type { CompileRequest } from "@backslash/shared";
-import { compile, type CompileResponse } from "@/lib/api";
+import { api, type CompileResponse } from "@/lib/api";
 
 type UseCompileOptions = {
   onStart?: () => void;
@@ -9,13 +8,13 @@ type UseCompileOptions = {
 };
 
 export function useCompile({ onStart, onResult, onSettled }: UseCompileOptions = {}) {
-  const mutation = useMutation({ mutationFn: compile });
+  const mutation = useMutation({ mutationFn: api.compile });
 
-  function run(request: CompileRequest) {
+  function run(projectId: string) {
     const startedAt = Date.now();
     onStart?.();
     // per-call callbacks only fire for the latest mutate() call, so stale results are dropped
-    mutation.mutate(request, {
+    mutation.mutate(projectId, {
       onSuccess: (result) => onResult?.(result, startedAt),
       onSettled: () => onSettled?.(),
     });

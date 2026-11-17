@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import * as z from "zod";
 
 try {
@@ -16,10 +15,15 @@ const Env = z.object({
     .string()
     .default("http://localhost:5173,http://127.0.0.1:5173")
     .transform((v) => v.split(",").map((o) => o.trim())),
-  DB_PATH: z
-    .string()
-    .default("../../.data/collab.sqlite")
-    .transform((p) => resolve(p)),
+  PUBLIC_URL: z.url().default("http://localhost:5173"),
+  DATABASE_URL: z.url(),
+  VALKEY_URL: z.url().default("valkey://127.0.0.1:6379"),
+  // same secret as the API: collab validates the API's session cookies
+  BETTER_AUTH_SECRET: z.string().min(32),
+  // internal HTTP server for the API (project snapshots); never expose it publicly
+  INTERNAL_HOST: z.string().default("127.0.0.1"),
+  INTERNAL_PORT: z.coerce.number().int().positive().default(1235),
+  INTERNAL_SECRET: z.string().min(32),
 });
 
 const parsed = Env.safeParse(process.env);

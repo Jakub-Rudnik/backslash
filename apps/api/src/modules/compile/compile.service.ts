@@ -1,37 +1,57 @@
-import type { CompileRequest } from "@backslash/shared";
-import { randomUUID } from "node:crypto";
-import { compileQueue, compileQueueEvents } from "./compile.queue.ts";
-import { join } from "node:path";
-import { env } from "../../config.ts";
+import { CompileRequest, type ProjectFile } from "@backslash/shared";
+import { getMainFile, listFiles } from "@backslash/shared/doc";
+import { projectBlobs, type Db } from "@backslash/db";
+import { and, eq, inArray } from "drizzle-orm";
+import * as Y from "yjs";
 import { blobExists } from "../blobs/blob.store.ts";
+import type { SnapshotSource } from "./snapshots.ts";
 
-export class CompileTimeoutError extends Error {}
+export class CompileInputError extends Error {}
 
-export class MissingBlobError extends Error {}
+/**
+ * Builds the compile input from the server's copy of the project, never from the client:
+ * a client could otherwise reference files (blob hashes) of projects it can't access.
+ */
+export async function buildCompileRequest(
+  db: Db,
+  snapshots: SnapshotSource,
+  blobDir: string,
+  projectId: string,
+): Promise<CompileRequest> {
+  const state = await snapshots(projectId);
+  if (!state) throw new CompileInputError("Project not found");
 
-export async function compile(request: CompileRequest) {
-  // fail fast with a clear message instead of a LaTeX "file not found"
-  for (const file of request.files) {
-    if ("hash" in file && !(await blobExists(env.BLOB_DIR, file.hash))) {
-      throw new MissingBlobError(`Uploaded file missing on server: ${file.path}`);
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, state);
+  const docFiles = listFiles(doc);
+  const main = getMainFile(doc, docFiles);
+  const files = docFiles.map((f): ProjectFile =>
+    f.kind === "text" ? { path: f.path, content: f.text.toJSON() } : { path: f.path, hash: f.hash },
+  );
+  doc.destroy();
+  if (!main) throw new CompileInputError("Add a .tex file to compile");
+
+  // blob hashes in the doc are written by clients: only allow ones uploaded to this project
+  const hashes = [...new Set(files.flatMap((f) => ("hash" in f ? [f.hash] : [])))];
+  const registered = new Set(
+    hashes.length === 0
+      ? []
+      : (
+          await db
+            .select({ hash: projectBlobs.hash })
+            .from(projectBlobs)
+            .where(and(eq(projectBlobs.projectId, projectId), inArray(projectBlobs.hash, hashes)))
+        ).map((r) => r.hash),
+  );
+  for (const f of files) {
+    if ("hash" in f && (!registered.has(f.hash) || !(await blobExists(blobDir, f.hash)))) {
+      throw new CompileInputError(`Uploaded file missing on server: ${f.path}`);
     }
   }
 
-  const jobId = randomUUID();
-  const job = await compileQueue.add("compile", request, { jobId });
-
-  try {
-    const result = await job.waitUntilFinished(compileQueueEvents, 60_000);
-    return { jobId, ...result };
-  } catch (err) {
-    const state = await job.getState();
-    if (state === "waiting" || state === "active") {
-      throw new CompileTimeoutError();
-    }
-    throw err;
+  const parsed = CompileRequest.safeParse({ files, mainFile: main.path });
+  if (!parsed.success) {
+    throw new CompileInputError(parsed.error.issues.map((i) => i.message).join(", "));
   }
-}
-
-export function getPdfpath(jobId: string) {
-  return join(env.COMPILE_DIR, jobId, "output.pdf");
+  return parsed.data;
 }

@@ -16,11 +16,8 @@ export default defineConfig({
     // listen on LAN too (proxied api/collab stay on loopback)
     host: true,
     proxy: {
-      // same-origin in dev, no CORS needed
-      "/api": {
-        target: API_URL,
-        rewrite: (path) => path.replace(/^\/api/, ""),
-      },
+      // same-origin in dev: no CORS, auth cookies just work. The API serves /api itself.
+      "/api": { target: API_URL },
       "/collab": {
         target: COLLAB_URL,
         ws: true,

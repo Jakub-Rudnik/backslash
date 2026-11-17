@@ -32,11 +32,13 @@
     "start": "node dist/index.mjs"
   },
   "dependencies": {
+    "@backslash/db": "workspace:*",
     "@backslash/shared": "workspace:*",
-    "@fastify/cors": "catalog:",
     "bullmq": "catalog:",
+    "drizzle-orm": "catalog:",
     "fastify": "catalog:",
     "iovalkey": "catalog:",
+    "yjs": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

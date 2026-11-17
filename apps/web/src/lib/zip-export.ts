@@ -3,14 +3,14 @@ import { strToU8, zip, type Zippable } from "fflate";
 import { fetchBlob } from "@/lib/api";
 
 /** Builds a .zip of the whole project and starts the download. */
-export async function downloadProjectZip(files: DocFile[], name: string) {
+export async function downloadProjectZip(projectId: string, files: DocFile[], name: string) {
   const entries: Zippable = {};
   await Promise.all(
     files.map(async (f) => {
       entries[f.path] =
         f.kind === "text"
           ? strToU8(f.text.toJSON())
-          : new Uint8Array(await (await fetchBlob(f.hash)).arrayBuffer());
+          : new Uint8Array(await (await fetchBlob(projectId, f.hash)).arrayBuffer());
     }),
   );
   const data = await new Promise<Uint8Array>((resolve, reject) =>
