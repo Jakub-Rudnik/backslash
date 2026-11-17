@@ -1,9 +1,5 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-
-async function healthHandler(request: FastifyRequest, reply: FastifyReply) {
-  return { ok: true };
-}
+import type { FastifyInstance } from "fastify";
 
 export async function healthRoutes(app: FastifyInstance) {
-  app.get("/health", healthHandler);
+  app.get("/health", async () => ({ ok: true }));
 }

@@ -1,5 +1,12 @@
 import { expect, test } from "vite-plus/test";
-import { CompileRequest, FilePath, ProjectId, resolvePathConflicts } from "../src/index.ts";
+import {
+  CompileRequest,
+  FilePath,
+  isTextPath,
+  ProjectId,
+  resolvePathConflicts,
+  sanitizePath,
+} from "../src/index.ts";
 
 const main = { path: "main.tex", content: "\\documentclass{article}" };
 
@@ -88,4 +95,48 @@ test("resolves path conflicts deterministically", () => {
     "0": "fig/y.png",
     f: "fig-2",
   });
+});
+
+test("compile request with blobs", () => {
+  const img = { path: "fig.png", hash: "f".repeat(64) };
+  expect(CompileRequest.safeParse({ files: [main, img], mainFile: "main.tex" }).success).toBe(true);
+  const bad = { path: "fig.png", hash: "../etc/passwd" };
+  expect(CompileRequest.safeParse({ files: [main, bad], mainFile: "main.tex" }).success).toBe(
+    false,
+  );
+  expect(CompileRequest.safeParse({ files: [img], mainFile: "fig.png" }).success).toBe(false);
+});
+
+test("sanitizes uploaded names", () => {
+  expect(sanitizePath("Wykres 1 (końcowy).PNG")).toBe("Wykres-1-koncowy.PNG");
+  expect(sanitizePath("Łódź/zdjęcie.jpg")).toBe("Lodz/zdjecie.jpg");
+  expect(sanitizePath("../../etc/passwd")).toBe("etc/passwd");
+  expect(sanitizePath(".latexmkrc")).toBe("latexmkrc");
+  expect(sanitizePath("???.png")).toBe("png");
+  for (const p of ["a b/c d.tex", "ä.png", "x//y", "-a"]) {
+    expect(FilePath.safeParse(sanitizePath(p)).success, p).toBe(true);
+  }
+});
+
+test("shortens long paths to valid ones", () => {
+  const cases = [
+    `${"a".repeat(254)}/b.tex`,
+    `dir/${"n".repeat(300)}.png`,
+    `${"d".repeat(100)}/${"e".repeat(100)}/${"f".repeat(100)}.tex`,
+    "x".repeat(400),
+  ];
+  for (const p of cases) {
+    const out = sanitizePath(p);
+    expect(out.length).toBeLessThanOrEqual(255);
+    expect(FilePath.safeParse(out).success, out).toBe(true);
+  }
+  expect(sanitizePath(`dir/${"n".repeat(300)}.png`)).toMatch(/^dir\/n+\.png$/);
+  expect(sanitizePath(`${"a".repeat(254)}/b.tex`)).toBe("b.tex");
+});
+
+test("text vs binary by extension", () => {
+  expect(isTextPath("main.tex")).toBe(true);
+  expect(isTextPath("refs.BIB")).toBe(true);
+  expect(isTextPath("fig.png")).toBe(false);
+  expect(isTextPath("Makefile")).toBe(false);
 });

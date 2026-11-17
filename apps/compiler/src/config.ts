@@ -16,6 +16,11 @@ const Env = z.object({
     .string()
     .default("../../.data/compiles")
     .transform((p) => resolve(p)),
+  // uploaded files (written by the API), copied into the job dir by hash
+  BLOB_DIR: z
+    .string()
+    .default("../../.data/blobs")
+    .transform((p) => resolve(p)),
   // how long compile dirs (and PDFs) are kept; matches queue removeOnComplete
   COMPILE_TTL_MS: z.coerce.number().int().positive().default(3_600_000),
 });

@@ -78,4 +78,73 @@ function isTexFile(path: string) {
   return path.endsWith(".tex");
 }
 
-export { FilePath, findPathConflict, isTexFile, MAX_PATH_LENGTH, resolvePathConflicts };
+function extension(path: string) {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+// edited as collaborative text; everything else is uploaded as a blob
+const TEXT_EXTENSIONS = new Set([
+  ...["tex", "ltx", "sty", "cls", "clo", "dtx", "ins", "def", "cfg", "fd"],
+  ...["bib", "bst", "bbx", "cbx", "lbx", "dbx"],
+  ...["txt", "md", "csv", "tsv", "dat", "tikz", "pgf", "lua", "asy", "gnuplot"],
+]);
+
+/** Whether a file with this path is edited as text (vs. stored as a binary blob). */
+function isTextPath(path: string) {
+  return TEXT_EXTENSIONS.has(extension(path));
+}
+
+/**
+ * Turns an arbitrary file name (e.g. "Wykres 1 (końcowy).PNG") into a valid path segment
+ * ("Wykres-1-koncowy.PNG"): strips accents, replaces anything else invalid with "-".
+ */
+function sanitizeSegment(name: string) {
+  const clean = name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    // don't decompose in NFKD
+    .replace(/ł/g, "l")
+    .replace(/Ł/g, "L")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/-+(?=\.)/g, "")
+    .replace(/^[.-]+|-+$/g, "");
+  return clean || "file";
+}
+
+const MAX_EXTENSION = 16;
+const MIN_NAME = 32;
+
+/** Fits a path into MAX_PATH_LENGTH: shortens the file name (keeping its extension), drops folders if needed. */
+function shortenPath(segs: string[]) {
+  const path = segs.join("/");
+  if (path.length <= MAX_PATH_LENGTH) return path;
+  const name = segs.at(-1)!;
+  const dirs = segs.slice(0, -1).join("/");
+  const prefix = dirs && dirs.length + 1 + MIN_NAME <= MAX_PATH_LENGTH ? `${dirs}/` : "";
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 && name.length - dot <= MAX_EXTENSION ? name.slice(dot) : "";
+  const stem = name.slice(0, name.length - ext.length);
+  return prefix + stem.slice(0, MAX_PATH_LENGTH - prefix.length - ext.length) + ext;
+}
+
+/** Sanitizes every segment of a "/"-separated path; empty segments are dropped. */
+function sanitizePath(path: string) {
+  const segs = path
+    .split("/")
+    .filter((s) => s && s !== "." && s !== "..")
+    .map(sanitizeSegment);
+  return shortenPath(segs.length > 0 ? segs : ["file"]);
+}
+
+export {
+  extension,
+  FilePath,
+  findPathConflict,
+  isTexFile,
+  isTextPath,
+  MAX_PATH_LENGTH,
+  resolvePathConflicts,
+  sanitizePath,
+};

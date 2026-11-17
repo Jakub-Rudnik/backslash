@@ -29,6 +29,7 @@
     "class-variance-authority": "catalog:",
     "cn": "catalog:",
     "codemirror-lang-latex": "catalog:",
+    "fflate": "catalog:",
     "pdfjs-dist": "catalog:",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

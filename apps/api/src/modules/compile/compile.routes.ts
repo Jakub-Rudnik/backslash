@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { compile, CompileTimeoutError, getPdfpath } from "./compile.service.ts";
+import { compile, CompileTimeoutError, getPdfpath, MissingBlobError } from "./compile.service.ts";
 import { CompileRequest, MAX_PROJECT_SIZE } from "@backslash/shared";
 import * as z from "zod";
 import { stat } from "node:fs/promises";
@@ -15,6 +15,9 @@ async function compileHandler(req: FastifyRequest, reply: FastifyReply) {
   try {
     return await compile(parsed.data);
   } catch (err) {
+    if (err instanceof MissingBlobError) {
+      return reply.code(400).send({ error: err.message });
+    }
     if (err instanceof CompileTimeoutError) {
       return reply.code(504).send({ error: "Compilation timed out" });
     }

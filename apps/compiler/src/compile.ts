@@ -1,6 +1,6 @@
 import type { CompileJobData, CompileResult } from "@backslash/shared";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { env } from "./config.ts";
 import { parseLog } from "./parse-log.ts";
@@ -79,13 +79,26 @@ async function exists(path: string) {
   }
 }
 
+class MissingBlobError extends Error {
+  constructor(readonly path: string) {
+    super(`Uploaded file missing on server: ${path}`);
+  }
+}
+
 /** Writes project files into `dir`; paths are validated upstream, re-checked here (path traversal). */
 async function writeFiles(dir: string, files: CompileJobData["files"]) {
-  for (const { path, content } of files) {
-    const target = resolve(dir, path);
-    if (!target.startsWith(dir + sep)) throw new Error(`Invalid path: ${path}`);
+  for (const file of files) {
+    const target = resolve(dir, file.path);
+    if (!target.startsWith(dir + sep)) throw new Error(`Invalid path: ${file.path}`);
     await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, content);
+    if ("content" in file) {
+      await writeFile(target, file.content);
+    } else {
+      // a copy, not a (hard)link: TeX may write into the job dir and must not touch the store
+      await copyFile(join(env.BLOB_DIR, file.hash), target).catch((err: NodeJS.ErrnoException) => {
+        throw err.code === "ENOENT" ? new MissingBlobError(file.path) : err;
+      });
+    }
   }
 }
 
@@ -95,7 +108,16 @@ export async function compileJob(
 ): Promise<CompileResult> {
   const dir = resolve(env.COMPILE_DIR, jobId);
   await mkdir(dir, { recursive: true });
-  await writeFiles(dir, files);
+  try {
+    await writeFiles(dir, files);
+  } catch (err) {
+    if (!(err instanceof MissingBlobError)) throw err;
+    return {
+      status: "error",
+      log: "",
+      errors: [{ file: err.path, line: null, message: err.message }],
+    };
+  }
 
   const run = await runLatexmk(dir, mainFile, env.COMPILE_TIMEOUT_MS);
 

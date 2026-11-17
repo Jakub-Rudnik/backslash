@@ -10,9 +10,11 @@ import {
   renameFile,
   renameFolder,
   setMainFile,
+  upsertFile,
   validateFolderRename,
   validatePath,
   type DocFile,
+  type FileContent,
 } from "@backslash/shared/doc";
 import { useEffect, useMemo, useState } from "react";
 import type { CollabSession } from "@/hooks/use-collab";
@@ -36,7 +38,7 @@ export function useProjectFiles(session: CollabSession | null) {
     const project = projectMap(session.doc);
     const update = () => setState(read(session));
     const onFiles = (events: Parameters<Parameters<typeof files.observeDeep>[0]>[0]) => {
-      if (isFileTreeChange(events, session.doc)) update();
+      if (isFileTreeChange(events)) update();
     };
     update();
     files.observeDeep(onFiles);
@@ -58,6 +60,9 @@ export function useProjectFiles(session: CollabSession | null) {
       validatePath: (path: string, ignoreId?: string) => validatePath(doc(), path, ignoreId),
       validateFolderRename: (from: string, to: string) => validateFolderRename(doc(), from, to),
       create: (path: string, content?: string) => createFile(doc(), path, content),
+      upsert: (path: string, content: FileContent) => upsertFile(doc(), path, content),
+      /** current (not render-time) list, for multi-step actions like uploads */
+      current: () => listFiles(doc()),
       rename: (id: string, path: string) => renameFile(doc(), id, path),
       remove: (id: string) => deleteFile(doc(), id),
       renameFolder: (from: string, to: string) => renameFolder(doc(), from, to),

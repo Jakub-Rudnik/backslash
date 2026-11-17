@@ -3,17 +3,23 @@ import { isInFolder, type DocFile } from "@backslash/shared/doc";
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
+  Cancel01Icon,
   Delete02Icon,
+  Download04Icon,
   File01Icon,
   FileAddIcon,
   Folder01Icon,
+  Image01Icon,
+  Loading03Icon,
   MoreHorizontalIcon,
+  Pdf01Icon,
   PencilEdit01Icon,
   StarIcon,
+  Upload04Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "cn";
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,9 +39,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Peer } from "@/hooks/use-collab";
 import type { ProjectFiles } from "@/hooks/use-project-files";
+import type { useUpload } from "@/hooks/use-upload";
+import { previewType } from "@/lib/mime";
+import { fromDataTransfer, fromFileList } from "@/lib/upload-sources";
 
 type FileTreeProps = {
   project: ProjectFiles;
+  upload: ReturnType<typeof useUpload>;
+  onDownloadZip: () => void;
   activeId: string | null;
   peers: Peer[];
   onOpen: (id: string) => void;
@@ -154,8 +165,30 @@ function RowMenu({ children }: { children: ReactNode }) {
   );
 }
 
-export function FileTree({ project, activeId, peers, onOpen, className }: FileTreeProps) {
+function fileIcon(file: DocFile) {
+  if (file.kind === "text") return File01Icon;
+  const type = previewType(file.path);
+  if (type === "application/pdf") return Pdf01Icon;
+  return type ? Image01Icon : File01Icon;
+}
+
+function dirOf(path: string) {
+  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+}
+
+export function FileTree({
+  project,
+  upload,
+  onDownloadZip,
+  activeId,
+  peers,
+  onOpen,
+  className,
+}: FileTreeProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const uploadDir = useRef("");
   const [editing, setEditing] = useState<Editing | null>(null);
   const [deleting, setDeleting] = useState<Deleting | null>(null);
   const tree = buildTree(project.files);
@@ -167,6 +200,29 @@ export function FileTree({ project, activeId, peers, onOpen, className }: FileTr
       if (!next.delete(path)) next.add(path);
       return next;
     });
+  }
+
+  function pickFiles(dir: string) {
+    uploadDir.current = dir;
+    fileInput.current?.click();
+  }
+
+  const hasFiles = (e: DragEvent) => e.dataTransfer.types.includes("Files");
+
+  function onDrop(e: DragEvent) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    setDragging(false);
+    // dropped on a folder row -> into it, on a file row -> next to it, elsewhere -> root
+    const target = (e.target as HTMLElement).closest<HTMLElement>("[data-dir]");
+    const dir = target?.dataset.dir ?? "";
+    fromDataTransfer(e.dataTransfer)
+      .then((raw) => upload.start(raw, dir))
+      .catch((err: unknown) =>
+        upload.report(
+          `Couldn't read dropped files: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
   }
 
   function startCreate(dir: string) {
@@ -238,7 +294,7 @@ export function FileTree({ project, activeId, peers, onOpen, className }: FileTr
     }
     return (
       <div key={node.path}>
-        <div className="group/row flex items-center rounded-md hover:bg-muted">
+        <div className="group/row flex items-center rounded-md hover:bg-muted" data-dir={node.path}>
           <button
             type="button"
             onClick={() => toggle(node.path)}
@@ -256,6 +312,10 @@ export function FileTree({ project, activeId, peers, onOpen, className }: FileTr
             <DropdownMenuItem onClick={() => startCreate(node.path)}>
               <HugeiconsIcon icon={FileAddIcon} />
               New file here
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={upload.busy} onClick={() => pickFiles(node.path)}>
+              <HugeiconsIcon icon={Upload04Icon} />
+              Upload here
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => setEditing({ kind: "rename-folder", path: node.path })}
@@ -306,6 +366,7 @@ export function FileTree({ project, activeId, peers, onOpen, className }: FileTr
     return (
       <div
         key={file.id}
+        data-dir={dirOf(file.path)}
         className={cn(
           "group/row flex items-center rounded-md hover:bg-muted",
           file.id === activeId && "bg-muted font-medium",
@@ -318,7 +379,7 @@ export function FileTree({ project, activeId, peers, onOpen, className }: FileTr
           // align with folder names (past the chevron)
           style={{ paddingLeft: indent(depth).paddingLeft + 20 }}
         >
-          <HugeiconsIcon icon={File01Icon} className="size-4 shrink-0 text-muted-foreground" />
+          <HugeiconsIcon icon={fileIcon(file)} className="size-4 shrink-0 text-muted-foreground" />
           <span className="truncate">{name}</span>
           {isMain && (
             <HugeiconsIcon
@@ -367,8 +428,8 @@ export function FileTree({ project, activeId, peers, onOpen, className }: FileTr
 
   return (
     <div className={cn("flex flex-col text-sm", className)}>
-      <div className="flex h-10 shrink-0 items-center justify-between border-b pr-1 pl-3">
-        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+      <div className="flex h-10 shrink-0 items-center gap-0.5 border-b pr-1 pl-3">
+        <span className="mr-auto text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Files
         </span>
         <Button
@@ -380,14 +441,114 @@ export function FileTree({ project, activeId, peers, onOpen, className }: FileTr
         >
           <HugeiconsIcon icon={FileAddIcon} />
         </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Upload files"
+          title="Upload files or a .zip (or drop them here)"
+          disabled={upload.busy}
+          onClick={() => pickFiles("")}
+        >
+          <HugeiconsIcon icon={Upload04Icon} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Download as ZIP"
+          title="Download project as .zip"
+          disabled={project.files.length === 0}
+          onClick={onDownloadZip}
+        >
+          <HugeiconsIcon icon={Download04Icon} />
+        </Button>
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = e.target.files;
+            // start() reports its own errors, never rejects
+            if (files?.length) void upload.start(fromFileList(files), uploadDir.current);
+            e.target.value = "";
+          }}
+        />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-1">
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto p-1",
+          dragging && "bg-primary/5 ring-2 ring-primary/40 ring-inset",
+        )}
+        onDragOver={(e) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+          setDragging(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+        }}
+        onDrop={onDrop}
+      >
         {renderCreate("", 0)}
         {renderNodes(tree, 0)}
         {project.files.length === 0 && !editing && (
-          <p className="p-3 text-xs text-muted-foreground">No files yet.</p>
+          <p className="p-3 text-xs text-muted-foreground">No files yet. Drop files here.</p>
         )}
       </div>
+
+      {(upload.progress || upload.errors.length > 0) && (
+        <div className="max-h-40 shrink-0 overflow-y-auto border-t p-2 text-xs">
+          {upload.progress && (
+            <p className="flex items-center gap-1.5 text-muted-foreground">
+              <HugeiconsIcon icon={Loading03Icon} className="size-3.5 animate-spin" />
+              Uploading {upload.progress.done}/{upload.progress.total}…
+            </p>
+          )}
+          {upload.errors.length > 0 && (
+            <div className="flex items-start gap-1">
+              <ul className="min-w-0 flex-1 space-y-0.5 text-destructive">
+                {upload.errors.map((e) => (
+                  <li key={e} className="break-all">
+                    {e}
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={upload.dismissErrors}
+                className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-muted"
+              >
+                <HugeiconsIcon icon={Cancel01Icon} className="size-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <AlertDialog
+        open={upload.replacing !== null}
+        onOpenChange={(open) => !open && upload.cancel()}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace existing files?</AlertDialogTitle>
+            <AlertDialogDescription>
+              These files will be overwritten for all collaborators:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="max-h-40 overflow-y-auto font-mono text-xs">
+            {upload.replacing?.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={upload.confirm}>Replace</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent size="sm">

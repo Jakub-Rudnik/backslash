@@ -24,7 +24,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "vp pack --watch",
+    "build": "vp pack",
     "dev": "vpx --watch src/index.ts",
     "test": "vp test",
     "check": "vp check",

@@ -1,13 +1,15 @@
 /**
  * Project structure inside the collab Y.Doc:
  *
- *   files:   Y.Map<fileId, Y.Map{ path: string, content: Y.Text }>
+ *   files:   Y.Map<fileId, Y.Map{ path: string, content: Y.Text }>       text file
+ *                          Y.Map{ path: string, hash: string, size: number } uploaded blob
  *   project: Y.Map{ mainFileId: string }
  *
  * Files are keyed by a stable id (not path), so renames don't recreate the Y.Text
  * and don't lose concurrent edits.
  */
 import * as Y from "yjs";
+import { BlobHash, MAX_FILES } from "./index.ts";
 import { FilePath, findPathConflict, isTexFile, resolvePathConflicts } from "./paths.ts";
 
 const DOC_FILES_FIELD = "files";
@@ -16,7 +18,9 @@ const DOC_PROJECT_FIELD = "project";
 const LEGACY_TEXT_FIELD = "source";
 const DEFAULT_MAIN_FILE = "main.tex";
 
-type DocFile = { id: string; path: string; text: Y.Text };
+type DocTextFile = { kind: "text"; id: string; path: string; text: Y.Text };
+type DocBlobFile = { kind: "blob"; id: string; path: string; hash: string; size: number };
+type DocFile = DocTextFile | DocBlobFile;
 
 function filesMap(doc: Y.Doc) {
   return doc.getMap<Y.Map<unknown>>(DOC_FILES_FIELD);
@@ -39,16 +43,22 @@ function listFiles(doc: Y.Doc): DocFile[] {
   for (const [id, entry] of filesMap(doc)) {
     if (!(entry instanceof Y.Map)) continue;
     const path = entry.get("path");
+    if (typeof path !== "string" || !FilePath.safeParse(path).success) continue;
     const text = entry.get("content");
-    if (!(text instanceof Y.Text) || !FilePath.safeParse(path).success) continue;
-    files.push({ id, path: path as string, text });
+    const hash = entry.get("hash");
+    const size = entry.get("size");
+    if (text instanceof Y.Text) {
+      files.push({ kind: "text", id, path, text });
+    } else if (BlobHash.safeParse(hash).success && typeof size === "number") {
+      files.push({ kind: "blob", id, path, hash: hash as string, size });
+    }
   }
   return resolvePathConflicts(files);
 }
 
 /** The chosen main file, falling back to main.tex or the first .tex file. */
-function getMainFile(doc: Y.Doc, files: DocFile[] = listFiles(doc)): DocFile | null {
-  const tex = files.filter((f) => isTexFile(f.path));
+function getMainFile(doc: Y.Doc, files: DocFile[] = listFiles(doc)): DocTextFile | null {
+  const tex = files.filter((f): f is DocTextFile => f.kind === "text" && isTexFile(f.path));
   const chosen = projectMap(doc).get("mainFileId");
   return (
     tex.find((f) => f.id === chosen) ??
@@ -63,9 +73,11 @@ function validatePath(doc: Y.Doc, path: string, ignoreId?: string): string | nul
   if (!FilePath.safeParse(path).success) {
     return "Use letters, digits, '.', '_', '-' and '/' only";
   }
-  const others = listFiles(doc)
-    .filter((f) => f.id !== ignoreId)
-    .map((f) => f.path);
+  const files = listFiles(doc);
+  if (ignoreId === undefined && files.length >= MAX_FILES) {
+    return `A project can have at most ${MAX_FILES} files`;
+  }
+  const others = files.filter((f) => f.id !== ignoreId).map((f) => f.path);
   if (findPathConflict([...others, path]) !== null) return "A file or folder with this name exists";
   return null;
 }
@@ -85,6 +97,52 @@ function createFile(doc: Y.Doc, path: string, content = ""): string {
     entry.set("content", new Y.Text(content));
   });
   return id;
+}
+
+function createBlobFile(doc: Y.Doc, path: string, hash: string, size: number): string {
+  assertPath(doc, path);
+  const id = newFileId();
+  doc.transact(() => {
+    const entry = new Y.Map<unknown>();
+    filesMap(doc).set(id, entry);
+    entry.set("path", path);
+    entry.set("hash", hash);
+    entry.set("size", size);
+  });
+  return id;
+}
+
+/** Replaces the content of an existing file (re-upload), keeping its id. */
+function replaceFile(doc: Y.Doc, id: string, content: FileContent) {
+  const entry = filesMap(doc).get(id);
+  if (!entry) return;
+  doc.transact(() => {
+    if ("text" in content) {
+      // a new Y.Text instead of editing the old one: concurrent replaces then resolve
+      // to one winner, instead of Yjs merging both inserted documents into one text
+      entry.delete("hash");
+      entry.delete("size");
+      entry.set("content", new Y.Text(content.text));
+    } else {
+      entry.delete("content");
+      entry.set("hash", content.hash);
+      entry.set("size", content.size);
+    }
+  });
+}
+
+type FileContent = { text: string } | { hash: string; size: number };
+
+/** Creates the file, or replaces the content of the file at `path` (uploads). Returns its id. */
+function upsertFile(doc: Y.Doc, path: string, content: FileContent): string {
+  const existing = listFiles(doc).find((f) => f.path === path);
+  if (existing) {
+    replaceFile(doc, existing.id, content);
+    return existing.id;
+  }
+  return "text" in content
+    ? createFile(doc, path, content.text)
+    : createBlobFile(doc, path, content.hash, content.size);
 }
 
 function renameFile(doc: Y.Doc, id: string, path: string) {
@@ -152,15 +210,16 @@ function seedProject(doc: Y.Doc, defaultSource: string): boolean {
   return true;
 }
 
-/** For observeDeep on the files map: true if files were added/removed/renamed (not just edited). */
-function isFileTreeChange(events: Y.YEvent<Y.AbstractType<unknown>>[], doc: Y.Doc): boolean {
-  const files = filesMap(doc);
-  return events.some(
-    (e) => e.target === files || (e instanceof Y.YMapEvent && e.keysChanged.has("path")),
-  );
+/**
+ * For observeDeep on the files map: true if files were added/removed/renamed/replaced,
+ * false for plain text edits (those target a Y.Text, not a Y.Map).
+ */
+function isFileTreeChange(events: Y.YEvent<Y.AbstractType<unknown>>[]): boolean {
+  return events.some((e) => e.target instanceof Y.Map);
 }
 
 export {
+  createBlobFile,
   createFile,
   DEFAULT_MAIN_FILE,
   deleteFile,
@@ -176,9 +235,11 @@ export {
   isInFolder,
   renameFile,
   renameFolder,
+  replaceFile,
   seedProject,
   setMainFile,
+  upsertFile,
   validateFolderRename,
   validatePath,
 };
-export type { DocFile };
+export type { DocBlobFile, DocFile, DocTextFile, FileContent };

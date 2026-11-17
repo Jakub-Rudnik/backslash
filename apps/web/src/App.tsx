@@ -4,6 +4,7 @@ import { PlayIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CollabStatus } from "@/components/collab-status";
 import { CompileStatus } from "@/components/compile-status";
+import { BlobViewer } from "@/components/blob-viewer";
 import { FileTree } from "@/components/file-tree";
 import { LatexEditor, type Reveal } from "@/components/latex-editor";
 import { PdfViewer } from "@/components/pdf-viewer";
@@ -16,9 +17,11 @@ import { useCollab } from "@/hooks/use-collab";
 import { useCompile } from "@/hooks/use-compile";
 import { useProjectFiles } from "@/hooks/use-project-files";
 import { useSharedBuild } from "@/hooks/use-shared-build";
+import { useUpload } from "@/hooks/use-upload";
 import { useTheme } from "@/hooks/use-theme";
 import { pdfUrl } from "@/lib/api";
 import { resolveProjectId } from "@/lib/project-id";
+import { downloadProjectZip } from "@/lib/zip-export";
 
 // compile dirs are cleaned up after 1h on the compiler; recompile before the shared PDF expires
 const PDF_MAX_AGE_MS = 50 * 60_000;
@@ -32,6 +35,13 @@ function App() {
   const { active, open } = useActiveFile(project.files, project.mainId);
   const [reveal, setReveal] = useState<(Reveal & { fileId: string }) | null>(null);
   const mainFile = project.files.find((f) => f.id === project.mainId) ?? null;
+  const upload = useUpload(project, (id) => open(id));
+
+  function downloadZip() {
+    downloadProjectZip(project.files, `${projectId}.zip`).catch((err: unknown) =>
+      upload.report(`ZIP download failed: ${err instanceof Error ? err.message : String(err)}`),
+    );
+  }
   const { theme, toggle: toggleTheme } = useTheme();
 
   const { run, isPending, error } = useCompile({
@@ -71,7 +81,11 @@ function App() {
   function compile() {
     if (!session || !synced || !mainFile) return;
     run({
-      files: project.files.map((f) => ({ path: f.path, content: f.text.toJSON() })),
+      files: project.files.map((f) =>
+        f.kind === "text"
+          ? { path: f.path, content: f.text.toJSON() }
+          : { path: f.path, hash: f.hash },
+      ),
       mainFile: mainFile.path,
     });
   }
@@ -102,6 +116,28 @@ function App() {
     ...(isPending ? ["You"] : []),
     ...peers.filter((p) => p.compiling).map((p) => p.user.name),
   ];
+
+  let editorPanel;
+  if (!session || !synced || !active) {
+    editorPanel = (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        {session && synced ? "No file open" : "Loading project…"}
+      </div>
+    );
+  } else if (active.kind === "blob") {
+    editorPanel = <BlobViewer file={active} className="h-full" />;
+  } else {
+    editorPanel = (
+      <LatexEditor
+        ytext={active.text}
+        path={active.path}
+        reveal={reveal?.fileId === active.id ? reveal : null}
+        awareness={session.provider.awareness}
+        dark={theme === "dark"}
+        className="h-full"
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen flex-col">
@@ -137,6 +173,8 @@ function App() {
         <ResizablePanel defaultSize="16" minSize={160} maxSize="40">
           <FileTree
             project={project}
+            upload={upload}
+            onDownloadZip={downloadZip}
             activeId={activeId}
             peers={peers}
             onOpen={openFile}
@@ -144,22 +182,7 @@ function App() {
           />
         </ResizablePanel>
         <ResizableHandle />
-        <ResizablePanel defaultSize="42">
-          {session && synced && active ? (
-            <LatexEditor
-              ytext={active.text}
-              path={active.path}
-              reveal={reveal?.fileId === active.id ? reveal : null}
-              awareness={session.provider.awareness}
-              dark={theme === "dark"}
-              className="h-full"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              {session && synced ? "No file open" : "Loading project…"}
-            </div>
-          )}
-        </ResizablePanel>
+        <ResizablePanel defaultSize="42">{editorPanel}</ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize="42">
           <PdfViewer

@@ -1,4 +1,4 @@
-import type { CompileRequest, CompileResult } from "@backslash/shared";
+import { UploadedBlob, type CompileRequest, type CompileResult } from "@backslash/shared";
 
 const API_BASE = "/api";
 
@@ -43,4 +43,26 @@ export async function compile(request: CompileRequest): Promise<CompileResponse>
 
 export function pdfUrl(jobId: string) {
   return `${API_BASE}/compile/${jobId}/pdf`;
+}
+
+export async function uploadBlob(data: Blob): Promise<UploadedBlob> {
+  const res = await fetch(`${API_BASE}/blobs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: data,
+  });
+  if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
+  return UploadedBlob.parse(await res.json());
+}
+
+/** Served as an attachment; use fetchBlob() to display it. */
+export function blobUrl(hash: string) {
+  return `${API_BASE}/blobs/${hash}`;
+}
+
+export async function fetchBlob(hash: string, type = ""): Promise<Blob> {
+  const res = await fetch(blobUrl(hash));
+  if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
+  // the server always says octet-stream; give the browser the real type for <img>/PDF
+  return new Blob([await res.arrayBuffer()], { type });
 }

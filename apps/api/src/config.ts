@@ -15,6 +15,11 @@ const Env = z.object({
     .string()
     .default("../../.data/compiles")
     .transform((p) => resolve(p)),
+  // uploaded files, shared with the compiler
+  BLOB_DIR: z
+    .string()
+    .default("../../.data/blobs")
+    .transform((p) => resolve(p)),
 });
 
 const parsed = Env.safeParse(process.env);

@@ -5,11 +5,26 @@ const COMPILE_QUEUE = "compile";
 const MAX_FILE_SIZE = 1_000_000;
 const MAX_PROJECT_SIZE = 5_000_000;
 const MAX_FILES = 200;
+/** uploaded (binary) files: images, PDFs, fonts */
+const MAX_BLOB_SIZE = 20 * 1024 * 1024;
 
-const ProjectFile = z.object({
+/** sha256 of the blob content, hex */
+const BlobHash = z.string().regex(/^[a-f0-9]{64}$/);
+
+const TextFile = z.object({
   path: FilePath,
   content: z.string().max(MAX_FILE_SIZE),
 });
+
+/** stored in the blob store (by the API), the compiler copies it in by hash */
+const BlobFile = z.object({
+  path: FilePath,
+  hash: BlobHash,
+});
+
+const ProjectFile = z.union([TextFile, BlobFile]);
+
+const UploadedBlob = z.object({ hash: BlobHash, size: z.number().int().nonnegative() });
 
 const CompileRequest = z
   .object({
@@ -17,7 +32,7 @@ const CompileRequest = z
     mainFile: FilePath,
   })
   .superRefine(({ files, mainFile }, ctx) => {
-    const size = files.reduce((sum, f) => sum + f.content.length, 0);
+    const size = files.reduce((sum, f) => sum + ("content" in f ? f.content.length : 0), 0);
     if (size > MAX_PROJECT_SIZE) {
       ctx.addIssue({ code: "custom", path: ["files"], message: "Project too large" });
     }
@@ -68,7 +83,10 @@ Hello, \LaTeX!
 \end{document}
 `;
 
+type TextFile = z.infer<typeof TextFile>;
+type BlobFile = z.infer<typeof BlobFile>;
 type ProjectFile = z.infer<typeof ProjectFile>;
+type UploadedBlob = z.infer<typeof UploadedBlob>;
 type CompileRequest = z.infer<typeof CompileRequest>;
 type CompileError = z.infer<typeof CompileError>;
 type CompileResult = z.infer<typeof CompileResult>;
@@ -76,6 +94,8 @@ type CompileJobData = z.infer<typeof CompileJobData>;
 type SharedBuild = z.infer<typeof SharedBuild>;
 
 export {
+  BlobFile,
+  BlobHash,
   COMPILE_QUEUE,
   CompileError,
   CompileJobData,
@@ -83,11 +103,14 @@ export {
   CompileResult,
   DEFAULT_SOURCE,
   DOC_BUILD_FIELD,
+  MAX_BLOB_SIZE,
   MAX_FILE_SIZE,
   MAX_FILES,
   MAX_PROJECT_SIZE,
   ProjectFile,
   ProjectId,
   SharedBuild,
+  TextFile,
+  UploadedBlob,
 };
 export * from "./paths.ts";
