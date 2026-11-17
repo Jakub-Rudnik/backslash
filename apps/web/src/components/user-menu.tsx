@@ -6,6 +6,7 @@ import { useAccount } from "@/lib/account";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -39,10 +40,13 @@ export function UserMenu() {
         {initials(account.name)}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuLabel>
-          <div className="truncate font-medium text-foreground">{account.name}</div>
-          <div className="truncate">{account.email}</div>
-        </DropdownMenuLabel>
+        {/* Base UI: a label must live inside a group */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            <div className="truncate font-medium text-foreground">{account.name}</div>
+            <div className="truncate">{account.email}</div>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuItem onClick={() => void signOut()}>
           <HugeiconsIcon icon={Logout01Icon} />
           Sign out
