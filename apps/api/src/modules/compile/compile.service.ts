@@ -6,9 +6,9 @@ import { env } from "../../config.ts";
 
 export class CompileTimeoutError extends Error {}
 
-export async function compile({ source }: CompileRequest) {
+export async function compile(request: CompileRequest) {
   const jobId = randomUUID();
-  const job = await compileQueue.add("compile", { source }, { jobId });
+  const job = await compileQueue.add("compile", request, { jobId });
 
   try {
     const result = await job.waitUntilFinished(compileQueueEvents, 60_000);
@@ -23,5 +23,5 @@ export async function compile({ source }: CompileRequest) {
 }
 
 export function getPdfpath(jobId: string) {
-  return join(env.COMPILE_DIR, jobId, "main.pdf");
+  return join(env.COMPILE_DIR, jobId, "output.pdf");
 }

@@ -1,28 +1,37 @@
+import type { CompileError } from "@backslash/shared";
 import { useEffect, useEffectEvent, useState } from "react";
 import { PlayIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CollabStatus } from "@/components/collab-status";
 import { CompileStatus } from "@/components/compile-status";
-import { LatexEditor } from "@/components/latex-editor";
+import { FileTree } from "@/components/file-tree";
+import { LatexEditor, type Reveal } from "@/components/latex-editor";
 import { PdfViewer } from "@/components/pdf-viewer";
 import { ShareButton } from "@/components/share-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { useActiveFile } from "@/hooks/use-active-file";
 import { useCollab } from "@/hooks/use-collab";
 import { useCompile } from "@/hooks/use-compile";
+import { useProjectFiles } from "@/hooks/use-project-files";
 import { useSharedBuild } from "@/hooks/use-shared-build";
 import { useTheme } from "@/hooks/use-theme";
 import { pdfUrl } from "@/lib/api";
-import { resolveDocId } from "@/lib/doc-id";
+import { resolveProjectId } from "@/lib/project-id";
 
 // compile dirs are cleaned up after 1h on the compiler; recompile before the shared PDF expires
 const PDF_MAX_AGE_MS = 50 * 60_000;
 
 function App() {
-  const [docId] = useState(resolveDocId);
-  const { session, status, synced, me, peers, rename, setCompiling } = useCollab(docId);
+  const [projectId] = useState(resolveProjectId);
+  const { session, status, synced, me, peers, rename, setCompiling, setActiveFile } =
+    useCollab(projectId);
   const build = useSharedBuild(session);
+  const project = useProjectFiles(session);
+  const { active, open } = useActiveFile(project.files, project.mainId);
+  const [reveal, setReveal] = useState<(Reveal & { fileId: string }) | null>(null);
+  const mainFile = project.files.find((f) => f.id === project.mainId) ?? null;
   const { theme, toggle: toggleTheme } = useTheme();
 
   const { run, isPending, error } = useCompile({
@@ -38,8 +47,33 @@ function App() {
       }),
   });
 
+  // tell collaborators which file we're in
+  const activeId = active?.id ?? null;
+  useEffect(() => {
+    setActiveFile(activeId);
+  }, [activeId, setActiveFile]);
+
+  function openFile(id: string) {
+    setReveal(null);
+    open(id);
+  }
+
+  const fileForError = (e: CompileError) =>
+    e.file ? project.files.find((f) => f.path === e.file) : undefined;
+
+  function jumpTo(e: CompileError) {
+    const file = fileForError(e);
+    if (!file) return;
+    open(file.id);
+    if (e.line) setReveal({ fileId: file.id, line: e.line, key: Date.now() });
+  }
+
   function compile() {
-    if (session && synced) run(session.ytext.toJSON());
+    if (!session || !synced || !mainFile) return;
+    run({
+      files: project.files.map((f) => ({ path: f.path, content: f.text.toJSON() })),
+      mainFile: mainFile.path,
+    });
   }
   const compileNow = useEffectEvent(compile);
   const pdfIsFresh = useEffectEvent(
@@ -76,7 +110,12 @@ function App() {
           <img src="/favicon.svg?v=2" alt="" className="size-6" />
           <span className="font-heading font-semibold">backslash</span>
         </a>
-        <Button size="sm" onClick={compile} disabled={isPending || !synced}>
+        <Button
+          size="sm"
+          onClick={compile}
+          disabled={isPending || !synced || !mainFile}
+          title={synced && !mainFile ? "Add a .tex file to compile" : undefined}
+        >
           <HugeiconsIcon icon={PlayIcon} data-icon="inline-start" />
           Compile
         </Button>
@@ -86,6 +125,8 @@ function App() {
             build={build.latest}
             error={isPending ? null : error}
             myName={me.name}
+            canJump={(e) => !!fileForError(e)}
+            onJump={jumpTo}
           />
         </div>
         <CollabStatus status={status} me={me} peers={peers} onRename={rename} />
@@ -93,22 +134,34 @@ function App() {
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
       </header>
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-        <ResizablePanel>
-          {session && synced ? (
+        <ResizablePanel defaultSize="16" minSize={160} maxSize="40">
+          <FileTree
+            project={project}
+            activeId={activeId}
+            peers={peers}
+            onOpen={openFile}
+            className="h-full"
+          />
+        </ResizablePanel>
+        <ResizableHandle />
+        <ResizablePanel defaultSize="42">
+          {session && synced && active ? (
             <LatexEditor
-              ytext={session.ytext}
+              ytext={active.text}
+              path={active.path}
+              reveal={reveal?.fileId === active.id ? reveal : null}
               awareness={session.provider.awareness}
               dark={theme === "dark"}
               className="h-full"
             />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              Loading document…
+              {session && synced ? "No file open" : "Loading project…"}
             </div>
           )}
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel>
+        <ResizablePanel defaultSize="42">
           <PdfViewer
             url={build.pdf ? pdfUrl(build.pdf.jobId) : null}
             className="h-full overflow-auto bg-muted p-4"

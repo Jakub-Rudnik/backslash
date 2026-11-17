@@ -35,8 +35,17 @@ import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 
+export type Reveal = {
+  line: number;
+  /** changes on every request, so the same line can be revealed twice */ key: number;
+};
+
 type LatexEditorProps = {
   ytext: Y.Text;
+  /** used to pick the language */
+  path: string;
+  /** scroll to and select this line */
+  reveal?: Reveal | null;
   awareness: HocuspocusProvider["awareness"];
   className?: string;
   dark?: boolean;
@@ -106,11 +115,26 @@ const setup = [
   ]),
 ];
 
-export function LatexEditor({ ytext, awareness, className, dark = false }: LatexEditorProps) {
+const LATEX_EXTENSIONS = /\.(tex|sty|cls|ltx|dtx|bbx|cbx)$/;
+
+function languageFor(path: string) {
+  return LATEX_EXTENSIONS.test(path) ? [latex()] : [];
+}
+
+export function LatexEditor({
+  ytext,
+  path,
+  reveal,
+  awareness,
+  className,
+  dark = false,
+}: LatexEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const themeCompartment = useRef(new Compartment());
   const darkRef = useRef(dark);
+  const languageCompartment = useRef(new Compartment());
+  const pathRef = useRef(path);
 
   useEffect(() => {
     const undoManager = new Y.UndoManager(ytext);
@@ -120,7 +144,7 @@ export function LatexEditor({ ytext, awareness, className, dark = false }: Latex
         doc: ytext.toJSON(),
         extensions: [
           setup,
-          latex(),
+          languageCompartment.current.of(languageFor(pathRef.current)),
           fullHeight,
           appTheme,
           themeCompartment.current.of(themeExtensions(darkRef.current)),
@@ -135,6 +159,26 @@ export function LatexEditor({ ytext, awareness, className, dark = false }: Latex
       viewRef.current = null;
     };
   }, [ytext, awareness]);
+
+  // renames (by anyone) can change the extension without remounting
+  useEffect(() => {
+    pathRef.current = path;
+    viewRef.current?.dispatch({
+      effects: languageCompartment.current.reconfigure(languageFor(path)),
+    });
+  }, [path]);
+
+  // runs after the view effect above, so a reveal for a newly opened file sees its view
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !reveal) return;
+    const line = view.state.doc.line(Math.min(Math.max(reveal.line, 1), view.state.doc.lines));
+    view.dispatch({
+      selection: { anchor: line.from, head: line.to },
+      effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+    });
+    view.focus();
+  }, [reveal, ytext]);
 
   useEffect(() => {
     darkRef.current = dark;

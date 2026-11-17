@@ -1,15 +1,17 @@
 import type { CompileJobData, CompileResult } from "@backslash/shared";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { env } from "./config.ts";
 import { parseLog } from "./parse-log.ts";
 
 const MAX_LOG_LENGTH = 200_000;
+/** -jobname: the PDF is output.pdf whatever the main file is called */
+const OUTPUT = "output";
 
 type RunResult = { code: number | null; timedOut: boolean; output: string };
 
-function runLatexmk(cwd: string, timeoutMs: number): Promise<RunResult> {
+function runLatexmk(cwd: string, mainFile: string, timeoutMs: number): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "latexmk",
@@ -19,7 +21,10 @@ function runLatexmk(cwd: string, timeoutMs: number): Promise<RunResult> {
         "-interaction=nonstopmode",
         "-halt-on-error",
         "-no-shell-escape",
-        "main.tex",
+        // errors as "file:line: msg", so we know which file they're in
+        "-file-line-error",
+        `-jobname=${OUTPUT}`,
+        mainFile,
       ],
       {
         cwd,
@@ -74,29 +79,40 @@ async function exists(path: string) {
   }
 }
 
+/** Writes project files into `dir`; paths are validated upstream, re-checked here (path traversal). */
+async function writeFiles(dir: string, files: CompileJobData["files"]) {
+  for (const { path, content } of files) {
+    const target = resolve(dir, path);
+    if (!target.startsWith(dir + sep)) throw new Error(`Invalid path: ${path}`);
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, content);
+  }
+}
+
 export async function compileJob(
   jobId: string,
-  { source }: CompileJobData,
+  { files, mainFile }: CompileJobData,
 ): Promise<CompileResult> {
-  const dir = join(env.COMPILE_DIR, jobId);
+  const dir = resolve(env.COMPILE_DIR, jobId);
   await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, "main.tex"), source);
+  await writeFiles(dir, files);
 
-  const run = await runLatexmk(dir, env.COMPILE_TIMEOUT_MS);
+  const run = await runLatexmk(dir, mainFile, env.COMPILE_TIMEOUT_MS);
 
-  const texLog = await readFile(join(dir, "main.log"), "utf8").catch(() => null);
+  const texLog = await readFile(join(dir, `${OUTPUT}.log`), "utf8").catch(() => null);
   const log = (texLog ?? run.output).slice(0, MAX_LOG_LENGTH);
 
   if (run.timedOut) {
     return {
       status: "error",
       log,
-      errors: [{ line: null, message: "Compilation timed out" }],
+      errors: [{ file: null, line: null, message: "Compilation timed out" }],
     };
   }
 
-  const errors = texLog ? parseLog(texLog) : [];
-  const hasPdf = await exists(join(dir, "main.pdf"));
+  const projectFiles = new Set(files.map((f) => f.path));
+  const errors = texLog ? parseLog(texLog, projectFiles) : [];
+  const hasPdf = await exists(join(dir, `${OUTPUT}.pdf`));
 
   if (run.code === 0 && hasPdf) {
     return { status: "success", log, errors };
@@ -105,6 +121,7 @@ export async function compileJob(
   return {
     status: "error",
     log,
-    errors: errors.length > 0 ? errors : [{ line: null, message: "Compilation failed" }],
+    errors:
+      errors.length > 0 ? errors : [{ file: null, line: null, message: "Compilation failed" }],
   };
 }

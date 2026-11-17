@@ -1,6 +1,6 @@
 # collab
 
-Hocuspocus (Yjs) WebSocket server for real-time editing. Documents are rooms named by `DocumentId`; state is persisted to SQLite (`node:sqlite`, no native deps) at `DB_PATH`. New documents are seeded with `DEFAULT_SOURCE` from `@backslash/shared`.
+Hocuspocus (Yjs) WebSocket server for real-time editing. One Yjs doc per project, the room name is the `ProjectId`; state is persisted to SQLite (`node:sqlite`, no native deps) at `DB_PATH`. Doc structure (files keyed by stable id, main file) lives in `@backslash/shared/doc`. New projects are seeded with `main.tex`; old single-file docs are migrated on load.
 
 ```bash
 cp .env.example .env

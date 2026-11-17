@@ -1,36 +1,46 @@
 import { expect, test } from "vite-plus/test";
 import { parseLog } from "../src/parse-log.ts";
 
-test("parses undefined control sequence with line", () => {
+const files = new Set(["main.tex", "ch/a.tex"]);
+
+test("file-line-error in a project file", () => {
   const log = [
-    "(./main.tex",
-    "! Undefined control sequence.",
-    "l.5 \\foo",
-    "         ",
-    "Here is how much of TeX's memory you used:",
+    "(./ch/a.tex",
+    "./ch/a.tex:3: Undefined control sequence.",
+    "l.3 \\foo",
+    "./ch/a.tex:3:  ==> Fatal error occurred, no output PDF file produced!",
   ].join("\n");
-
-  expect(parseLog(log)).toEqual([{ line: 5, message: "Undefined control sequence." }]);
-});
-
-test("error without line reference", () => {
-  const log = "! LaTeX Error: File `nope.sty' not found.\n\nType X to quit";
-  expect(parseLog(log)).toEqual([
-    { line: null, message: "LaTeX Error: File `nope.sty' not found." },
+  expect(parseLog(log, files)).toEqual([
+    { file: "ch/a.tex", line: 3, message: "Undefined control sequence." },
   ]);
 });
 
-test("skips trailing emergency stop", () => {
+test("error inside a package is not attributed to a project file", () => {
+  const log = "/usr/share/texmf/tex/latex/foo/foo.sty:120: Package foo Error: bad.";
+  expect(parseLog(log, files)).toEqual([
+    { file: null, line: null, message: "Package foo Error: bad." },
+  ]);
+});
+
+test("classic error without file, then emergency stop", () => {
   const log = [
-    "! Missing $ inserted.",
-    "l.3 a^b",
-    "! Emergency stop.",
-    "l.3",
-    "!  ==> Fatal error occurred, no output PDF file produced!",
+    "! LaTeX Error: File `nope.sty' not found.",
+    "",
+    "l.2 \\usepackage",
+    "./main.tex:2: Emergency stop.",
+    "./main.tex:2:  ==> Fatal error occurred, no output PDF file produced!",
   ].join("\n");
-  expect(parseLog(log)).toEqual([{ line: 3, message: "Missing $ inserted." }]);
+  expect(parseLog(log, files)).toEqual([
+    { file: null, line: 2, message: "LaTeX Error: File `nope.sty' not found." },
+  ]);
+});
+
+test("lone emergency stop is kept", () => {
+  expect(parseLog("./main.tex:7: Emergency stop.", files)).toEqual([
+    { file: "main.tex", line: 7, message: "Emergency stop." },
+  ]);
 });
 
 test("clean log has no errors", () => {
-  expect(parseLog("Output written on main.pdf (1 page).")).toEqual([]);
+  expect(parseLog("Output written on output.pdf (1 page).", files)).toEqual([]);
 });

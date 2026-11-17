@@ -1,6 +1,6 @@
 # compiler
 
-BullMQ worker consuming the `compile` queue. Writes `main.tex` to `COMPILE_DIR/<jobId>/`, runs `latexmk`, returns a `CompileResult`. The API serves `main.pdf` from the same dir.
+BullMQ worker consuming the `compile` queue. Writes the project files to `COMPILE_DIR/<jobId>/`, runs `latexmk -jobname=output -file-line-error <mainFile>` from the project root, returns a `CompileResult` (errors carry project-relative file + line). The API serves `output.pdf` from the same dir.
 
 Requires `latexmk` + `pdflatex` on PATH and a running Valkey.
 

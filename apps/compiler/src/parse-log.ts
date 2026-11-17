@@ -1,38 +1,52 @@
 import type { CompileError } from "@backslash/shared";
 
+// -file-line-error format: "./ch/intro.tex:12: Undefined control sequence."
+const FILE_LINE_ERROR = /^(\S+?):(\d+): (.*)$/;
+// classic format: "! msg" followed by "l.<n> ..." (TeX still uses it for some errors)
 const LINE_REF = /^l\.(\d+)/;
 // how far after a "!" line to look for its "l.<n>" line reference
 const LOOKAHEAD = 12;
 
+function projectPath(file: string, projectFiles: ReadonlySet<string>) {
+  const path = file.replace(/^\.\//, "");
+  return projectFiles.has(path) ? path : null;
+}
+
 /**
- * Extracts errors from a TeX log (classic, non file-line-error format).
- * Errors start with "! ", the source line follows as "l.<n> ...".
+ * Extracts errors from a TeX log produced with -file-line-error.
+ * Files outside `projectFiles` (packages, classes) are reported as `file: null, line: null`.
  */
-export function parseLog(log: string): CompileError[] {
+export function parseLog(log: string, projectFiles: ReadonlySet<string>): CompileError[] {
   const lines = log.split(/\r?\n/);
   const errors: CompileError[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const current = lines[i]!;
-    if (!current.startsWith("! ")) continue;
+    let error: CompileError | null = null;
 
-    const message = current.slice(2).trim();
-    // follow-up noise after the real error
-    if (message.startsWith("==>")) continue;
-    if (message === "Emergency stop." && errors.length > 0) continue;
-
-    let line: number | null = null;
-    for (let j = i + 1; j < Math.min(lines.length, i + 1 + LOOKAHEAD); j++) {
-      const next = lines[j]!;
-      if (next.startsWith("! ")) break;
-      const match = LINE_REF.exec(next);
-      if (match) {
-        line = Number(match[1]);
-        break;
+    const fileLine = FILE_LINE_ERROR.exec(current);
+    if (fileLine) {
+      const file = projectPath(fileLine[1]!, projectFiles);
+      error = { file, line: file ? Number(fileLine[2]) : null, message: fileLine[3]!.trim() };
+    } else if (current.startsWith("! ")) {
+      let line: number | null = null;
+      for (let j = i + 1; j < Math.min(lines.length, i + 1 + LOOKAHEAD); j++) {
+        const next = lines[j]!;
+        if (next.startsWith("! ") || FILE_LINE_ERROR.test(next)) break;
+        const match = LINE_REF.exec(next);
+        if (match) {
+          line = Number(match[1]);
+          break;
+        }
       }
+      error = { file: null, line, message: current.slice(2).trim() };
     }
 
-    errors.push({ line, message });
+    if (!error) continue;
+    // follow-up noise after the real error
+    if (error.message.startsWith("==>")) continue;
+    if (error.message === "Emergency stop." && errors.length > 0) continue;
+    errors.push(error);
   }
 
   return errors;

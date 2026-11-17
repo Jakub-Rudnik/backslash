@@ -1,9 +1,9 @@
-import { DocumentId } from "@backslash/shared";
+import { ProjectId } from "@backslash/shared";
 import { Database } from "@hocuspocus/extension-database";
 import { Server } from "@hocuspocus/server";
 import { env } from "./config.ts";
 import { openDb } from "./db.ts";
-import { initialState } from "./initial-state.ts";
+import { ensureProject } from "./initial-state.ts";
 
 const db = openDb(env.DB_PATH);
 
@@ -21,8 +21,9 @@ function isAllowedOrigin(origin: string, host: string | null) {
 const server = new Server({
   address: env.HOST,
   port: env.PORT,
-  // ws maxPayload; source limit is 1MB, leave room for Yjs overhead
-  websocketOptions: { maxPayload: 4 * 1024 * 1024 },
+  // ws maxPayload; the initial sync sends the whole project (MAX_PROJECT_SIZE UTF-16 chars,
+  // up to 3 bytes each in UTF-8) plus Yjs overhead
+  websocketOptions: { maxPayload: 24 * 1024 * 1024 },
   debounce: 2000,
   maxDebounce: 10_000,
   stopOnSignals: false,
@@ -32,7 +33,7 @@ const server = new Server({
     if (origin && !isAllowedOrigin(origin, requestHeaders.get("host"))) {
       throw new Error(`Origin not allowed: ${origin}`);
     }
-    if (!DocumentId.safeParse(documentName).success) {
+    if (!ProjectId.safeParse(documentName).success) {
       throw new Error("Invalid document name");
     }
   },
@@ -41,12 +42,12 @@ const server = new Server({
     new Database({
       fetch: async ({ documentName }) => {
         const existing = db.get(documentName);
-        if (existing) return existing;
-        // persist the seed immediately: if the server restarted before the first edit,
-        // a re-seeded doc (new clientID) would merge with clients' copy and duplicate the text
-        const state = initialState();
-        db.put(documentName, state);
-        return state;
+        const seeded = ensureProject(existing);
+        if (!seeded) return existing;
+        // persist the seed/migration immediately: if the server restarted before the first edit,
+        // a re-seeded doc (new clientID) would merge with clients' copy and duplicate the files
+        db.put(documentName, seeded);
+        return seeded;
       },
       store: async ({ documentName, state }) => db.put(documentName, state),
     }),

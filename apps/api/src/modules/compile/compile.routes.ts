@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { compile, CompileTimeoutError, getPdfpath } from "./compile.service.ts";
-import { CompileRequest } from "@backslash/shared";
+import { CompileRequest, MAX_PROJECT_SIZE } from "@backslash/shared";
 import * as z from "zod";
 import { stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
@@ -46,6 +46,7 @@ async function pdfHandler(req: FastifyRequest, reply: FastifyReply) {
 }
 
 export async function compileRoutes(app: FastifyInstance) {
-  app.post("/", compileHandler);
+  // projects are up to MAX_PROJECT_SIZE chars; JSON escaping and multi-byte chars add overhead
+  app.post("/", { bodyLimit: 4 * MAX_PROJECT_SIZE }, compileHandler);
   app.get("/:id/pdf", pdfHandler);
 }
