@@ -10,7 +10,8 @@ try {
 const Env = z.object({
   HOST: z.string().default("127.0.0.1"),
   PORT: z.coerce.number().int().positive().default(1234),
-  // comma separated; browsers send Origin on WS upgrade, reject others (CSWSH)
+  // comma separated, extra allowed origins besides same-origin;
+  // browsers send Origin on WS upgrade, reject others (CSWSH)
   WEB_ORIGIN: z
     .string()
     .default("http://localhost:5173,http://127.0.0.1:5173")

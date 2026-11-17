@@ -7,6 +7,17 @@ import { initialState } from "./initial-state.ts";
 
 const db = openDb(env.DB_PATH);
 
+// same-origin (page served from the host the WS goes through, e.g. via vite proxy
+// on a LAN IP) or explicitly listed in WEB_ORIGIN
+function isAllowedOrigin(origin: string, host: string | null) {
+  if (env.WEB_ORIGIN.includes(origin)) return true;
+  try {
+    return host !== null && new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
 const server = new Server({
   address: env.HOST,
   port: env.PORT,
@@ -18,7 +29,7 @@ const server = new Server({
 
   async onConnect({ documentName, requestHeaders }) {
     const origin = requestHeaders.get("origin");
-    if (origin && !env.WEB_ORIGIN.includes(origin)) {
+    if (origin && !isAllowedOrigin(origin, requestHeaders.get("host"))) {
       throw new Error(`Origin not allowed: ${origin}`);
     }
     if (!DocumentId.safeParse(documentName).success) {

@@ -13,6 +13,8 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
   server: {
+    // listen on LAN too (proxied api/collab stay on loopback)
+    host: true,
     proxy: {
       // same-origin in dev, no CORS needed
       "/api": {
