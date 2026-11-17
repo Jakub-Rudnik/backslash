@@ -558,7 +558,7 @@ export function FileTree({
               These files will be overwritten for all collaborators:
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <ul className="max-h-40 overflow-y-auto font-mono text-xs">
+          <ul className="max-h-40 overflow-y-auto font-mono text-xs break-all">
             {upload.replacing?.map((p) => (
               <li key={p}>{p}</li>
             ))}
@@ -577,7 +577,7 @@ export function FileTree({
               Delete {deleting?.kind === "folder" ? "folder" : "file"}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              <span className="font-mono">{deleting?.path}</span>
+              <span className="font-mono break-all">{deleting?.path}</span>
               {deleting?.kind === "folder" && " and everything in it"} will be deleted for all
               collaborators.
             </AlertDialogDescription>

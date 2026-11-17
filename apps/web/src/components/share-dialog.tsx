@@ -75,7 +75,8 @@ function CopyLink({ url }: { url: string }) {
   }
   return (
     <div className="flex items-center gap-2 rounded-2xl border bg-muted/50 p-1.5 pl-3">
-      <span className="min-w-0 flex-1 truncate font-mono text-xs">{url}</span>
+      {/* long token: wrap instead of widening the dialog */}
+      <span className="min-w-0 flex-1 font-mono text-xs break-all select-all">{url}</span>
       <Button size="sm" variant="outline" onClick={() => void copy()}>
         <HugeiconsIcon icon={copied ? Tick02Icon : Copy01Icon} data-icon="inline-start" />
         {copied ? "Copied" : "Copy"}
