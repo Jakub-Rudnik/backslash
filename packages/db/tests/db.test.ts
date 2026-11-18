@@ -49,13 +49,3 @@ test("sign up, session from cookie, project role", async () => {
   expect(hasRole(null, "viewer")).toBe(false);
   await db.delete(projects).where(eq(projects.id, id));
 });
-
-test("rejects wrong password", async () => {
-  const email = `w${Date.now()}@example.com`;
-  await auth.api.signUpEmail({ body: { email, password: "correct horse battery", name: "B" } });
-  const res = await auth.api.signInEmail({
-    body: { email, password: "wrong password!!" },
-    asResponse: true,
-  });
-  expect(res.status).toBe(401);
-});

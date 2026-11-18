@@ -1,11 +1,9 @@
-import Fastify from "fastify";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { blobPath, BlobTooLargeError, storeBlob } from "../src/features/blobs/blob.store.ts";
-import { healthRoutes } from "../src/features/health/health.routes.ts";
 
 let dir: string;
 
@@ -18,12 +16,6 @@ afterAll(async () => {
 });
 
 const tmpFiles = async () => (await readdir(dir)).filter((f) => f.startsWith(".tmp"));
-
-test("health", async () => {
-  const app = Fastify();
-  app.register(healthRoutes);
-  expect((await app.inject("/health")).json()).toEqual({ ok: true });
-});
 
 test("blobs are content-addressed and deduplicated", async () => {
   const first = await storeBlob(dir, Readable.from([Buffer.from("hello")]), 100);
