@@ -1,4 +1,4 @@
-import type { Auth } from "@backslash/db/auth";
+import { CLIENT_IP_HEADER, type Auth } from "@backslash/db/auth";
 import type { FastifyInstance } from "fastify";
 import { toHeaders } from "../../lib/access.ts";
 
@@ -11,9 +11,9 @@ export async function authRoutes(app: FastifyInstance, { auth }: { auth: Auth })
       const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
       const body =
         req.method === "POST" && req.body !== undefined ? JSON.stringify(req.body) : undefined;
-      const response = await auth.handler(
-        new Request(url, { method: req.method, headers: toHeaders(req.headers), body }),
-      );
+      const headers = toHeaders(req.headers);
+      headers.set(CLIENT_IP_HEADER, req.ip);
+      const response = await auth.handler(new Request(url, { method: req.method, headers, body }));
       reply.code(response.status);
       for (const [key, value] of response.headers) {
         if (key === "set-cookie") continue;

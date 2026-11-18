@@ -33,6 +33,40 @@ function isAllowedOrigin(origin: string, headers: Headers) {
 }
 
 const RECONCILE_INTERVAL_MS = 30_000;
+const MAX_CONNECTIONS_PER_USER = 20;
+const MAX_DOC_SIZE = 50 * 1024 * 1024;
+
+/** projects whose doc outgrew MAX_DOC_SIZE: they stay readable but nobody can edit them */
+const oversized = new Set<string>();
+
+function rejection(reason: string, message: string) {
+  return Object.assign(new Error(message), { reason });
+}
+
+function connectionsOf(userId: string) {
+  let count = 0;
+  for (const document of server.hocuspocus.documents.values()) {
+    document.connections.forEach((_clients, connection) => {
+      if (connection.context.userId === userId) count += 1;
+    });
+  }
+  return count;
+}
+
+function checkSize(projectId: string, state: Uint8Array) {
+  if (state.length <= MAX_DOC_SIZE) {
+    oversized.delete(projectId);
+    return;
+  }
+  if (oversized.has(projectId)) return;
+  oversized.add(projectId);
+  console.warn(
+    `project ${projectId} is over the size limit (${state.length} bytes), now read-only`,
+  );
+  server.hocuspocus.documents.get(projectId)?.connections.forEach((_clients, connection) => {
+    if (!connection.readOnly) connection.webSocket.close(4413, "Project too large");
+  });
+}
 
 const server = new Server<ConnectionContext>({
   address: env.HOST,
@@ -56,7 +90,10 @@ const server = new Server<ConnectionContext>({
     if (!user) throw new Error("Not signed in");
     const role = await getProjectRole(db, projectId.data, user.id);
     if (!role) throw new Error("No access");
-    connectionConfig.readOnly = role === "viewer";
+    if (connectionsOf(user.id) >= MAX_CONNECTIONS_PER_USER) {
+      throw rejection("too-many-connections", "Too many open connections");
+    }
+    connectionConfig.readOnly = role === "viewer" || oversized.has(projectId.data);
     return { userId: user.id, role } satisfies ConnectionContext;
   },
 
@@ -71,12 +108,16 @@ const server = new Server<ConnectionContext>({
         if (!existing && !(await store.projectExists(documentName))) {
           throw new ProjectNotFoundError(documentName);
         }
+        if (existing) checkSize(documentName, existing);
         const seeded = ensureProject(existing);
         if (!seeded) return existing;
         await store.save(documentName, seeded);
         return seeded;
       },
-      store: async ({ documentName, state }) => store.save(documentName, state),
+      store: async ({ documentName, state }) => {
+        await store.save(documentName, state);
+        checkSize(documentName, state);
+      },
     }),
   ],
 });

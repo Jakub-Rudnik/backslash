@@ -36,6 +36,9 @@ const Env = z
       .string()
       .default("../../.data/blobs")
       .transform((p) => resolve(p)),
+    MAX_PROJECTS_PER_USER: z.coerce.number().int().positive().default(100),
+    /** uploaded files across all projects a user owns */
+    MAX_STORAGE_PER_USER_MB: z.coerce.number().int().positive().default(1024),
   })
   .refine((e) => !e.GITHUB_CLIENT_ID === !e.GITHUB_CLIENT_SECRET, {
     message: "Set both GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, or neither",

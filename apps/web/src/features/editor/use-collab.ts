@@ -34,13 +34,14 @@ function isCollabUser(u: unknown): u is CollabUser {
 
 /**
  * Connects to the project's collab doc. The server checks the session cookie and membership;
- * `denied` is set when it refuses (no access, access revoked, signed out).
+ * `denied` holds the server's reason when it refuses: `too-many-connections`, or anything else
+ * for no access (access revoked, signed out).
  */
 export function useCollab(projectId: string, account: { id: string; name: string }) {
   const [session, setSession] = useState<CollabSession | null>(null);
   const [status, setStatus] = useState<WebSocketStatus>(WebSocketStatus.Connecting);
   const [synced, setSynced] = useState(false);
-  const [denied, setDenied] = useState(false);
+  const [denied, setDenied] = useState<string | null>(null);
   const [readOnly, setReadOnly] = useState<boolean | null>(null);
   const [me, setMe] = useState<CollabUser>(() => identityFor(account));
   const [peers, setPeers] = useState<Peer[]>([]);
@@ -60,11 +61,11 @@ export function useCollab(projectId: string, account: { id: string; name: string
       onStatus: ({ status }) => setStatus(status),
       onSynced: ({ state }) => setSynced(state),
       onAuthenticated: ({ scope }) => {
-        setDenied(false);
+        setDenied(null);
         setReadOnly(scope === "readonly");
       },
-      onAuthenticationFailed: () => {
-        setDenied(true);
+      onAuthenticationFailed: ({ reason }) => {
+        setDenied(reason);
         setSynced(false);
       },
       onAwarenessChange: ({ states }) => {
@@ -108,7 +109,7 @@ export function useCollab(projectId: string, account: { id: string; name: string
       doc.destroy();
       setSession(null);
       setSynced(false);
-      setDenied(false);
+      setDenied(null);
       setReadOnly(null);
       setPeers([]);
     };

@@ -10,14 +10,21 @@ import {
   type ProjectSummary,
 } from "@backslash/shared";
 import { higherRole, projectInvites, projectMembers, projects, user, type Db } from "@backslash/db";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, count, desc, eq, gt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { createHash, randomBytes } from "node:crypto";
 import * as z from "zod";
 import { requireProject, requireUser } from "../../lib/access.ts";
 import type { ProjectEvents } from "../../lib/events.ts";
+import { rateLimit } from "../../lib/rate-limit.ts";
+import type { RateLimitStore } from "@backslash/db/auth";
 
-export type ProjectRoutesOptions = { db: Db; events: ProjectEvents };
+export type ProjectRoutesOptions = {
+  db: Db;
+  events: ProjectEvents;
+  limits: RateLimitStore;
+  maxProjectsPerUser: number;
+};
 
 const INVITE_TTL_MS = 7 * 24 * 3600_000;
 
@@ -31,7 +38,10 @@ function badRequest(reply: FastifyReply, error: z.ZodError) {
   return reply.code(400).send({ error: z.flattenError(error) });
 }
 
-export async function projectRoutes(app: FastifyInstance, { db, events }: ProjectRoutesOptions) {
+export async function projectRoutes(
+  app: FastifyInstance,
+  { db, events, limits, maxProjectsPerUser }: ProjectRoutesOptions,
+) {
   // --- projects ---
 
   app.get("/projects", async (req, reply) => {
@@ -58,6 +68,16 @@ export async function projectRoutes(app: FastifyInstance, { db, events }: Projec
     if (!me) return reply;
     const body = CreateProject.safeParse(req.body);
     if (!body.success) return badRequest(reply, body.error);
+    if (!(await rateLimit(limits, req, reply, "createProject"))) return reply;
+    const [owned] = await db
+      .select({ count: count() })
+      .from(projects)
+      .where(eq(projects.ownerId, me.id));
+    if ((owned?.count ?? 0) >= maxProjectsPerUser) {
+      return reply
+        .code(403)
+        .send({ error: `You can own at most ${maxProjectsPerUser} projects, delete one first` });
+    }
     const id = newId();
     await db.transaction(async (tx) => {
       await tx.insert(projects).values({ id, name: body.data.name, ownerId: me.id });
@@ -211,6 +231,7 @@ export async function projectRoutes(app: FastifyInstance, { db, events }: Projec
     if (!access) return reply;
     const body = CreateInvite.safeParse(req.body);
     if (!body.success) return badRequest(reply, body.error);
+    if (!(await rateLimit(limits, req, reply, "createInvite"))) return reply;
     const token = newId(32);
     const invite = {
       id: newId(),
@@ -262,6 +283,7 @@ export async function projectRoutes(app: FastifyInstance, { db, events }: Projec
 
   app.get("/invites/:token", async (req, reply) => {
     if (!requireUser(req, reply)) return reply;
+    if (!(await rateLimit(limits, req, reply, "useInvite"))) return reply;
     const params = TokenParams.safeParse(req.params);
     const invite = params.success ? await findInvite(params.data.token) : undefined;
     if (!invite) return reply.code(404).send({ error: "Invite link is invalid or expired" });
@@ -274,6 +296,7 @@ export async function projectRoutes(app: FastifyInstance, { db, events }: Projec
   app.post("/invites/:token/accept", async (req, reply) => {
     const me = requireUser(req, reply);
     if (!me) return reply;
+    if (!(await rateLimit(limits, req, reply, "useInvite"))) return reply;
     const params = TokenParams.safeParse(req.params);
     const invite = params.success ? await findInvite(params.data.token) : undefined;
     if (!invite) return reply.code(404).send({ error: "Invite link is invalid or expired" });

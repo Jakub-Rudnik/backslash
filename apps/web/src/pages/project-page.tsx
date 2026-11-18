@@ -175,7 +175,11 @@ function ProjectEditor({
     return (
       <FullPageMessage>
         <div className="space-y-4">
-          <p>You no longer have access to this project.</p>
+          <p>
+            {denied === "too-many-connections"
+              ? "You have too many projects open. Close some tabs and reload this page."
+              : "You no longer have access to this project."}
+          </p>
           <Link to="/" className="font-medium text-foreground underline">
             Back to your projects
           </Link>

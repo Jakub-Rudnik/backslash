@@ -3,6 +3,16 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import type { Db } from "./client.ts";
 import { account, session, user, verification } from "./schema/auth.ts";
 
+export type RateRule = { window: number; max: number };
+
+/** Counts requests per key in fixed windows (seconds); shared by Better Auth and the API. */
+export type RateLimitStore = {
+  consume(key: string, rule: RateRule): Promise<{ allowed: boolean; retryAfter: number | null }>;
+};
+
+/** Header the API sets from the connection (never taken from the client) for per-IP limits. */
+export const CLIENT_IP_HEADER = "x-backslash-client-ip";
+
 export type AuthOptions = {
   db: Db;
   secret: string;
@@ -11,9 +21,18 @@ export type AuthOptions = {
   /** extra origins allowed to call the auth API; same-origin requests are always allowed */
   trustedOrigins: string[];
   github?: { clientId: string; clientSecret: string } | undefined;
+  /** rate limits sign-in, sign-up and password resets per IP; off when not given */
+  rateLimits?: RateLimitStore | undefined;
 };
 
-export function createAuth({ db, secret, baseURL, trustedOrigins, github }: AuthOptions) {
+export function createAuth({
+  db,
+  secret,
+  baseURL,
+  trustedOrigins,
+  github,
+  rateLimits,
+}: AuthOptions) {
   return betterAuth({
     secret,
     baseURL,
@@ -37,8 +56,19 @@ export function createAuth({ db, secret, baseURL, trustedOrigins, github }: Auth
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,
     },
+    rateLimit: {
+      enabled: rateLimits !== undefined,
+      window: 60,
+      max: 100,
+      customStorage: rateLimits,
+      customRules: {
+        "/sign-in/email": { window: 60, max: 10 },
+        "/sign-up/email": { window: 3600, max: 10 },
+      },
+    },
     advanced: {
       database: { generateId: () => crypto.randomUUID() },
+      ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },
     },
   });
 }

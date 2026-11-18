@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vite-plus/test";
 import * as Y from "yjs";
 import { buildApp } from "../src/app.ts";
+import { memoryRateLimits, RATE_LIMITS } from "../src/lib/rate-limit.ts";
 import type { CompileBackend } from "../src/features/compile/compile.backend.ts";
 
 const DB_URL =
@@ -63,10 +64,14 @@ async function compileProject(user: User, project: string) {
   return waitForBuild(project, seq);
 }
 
+let signUps = 0;
+
 async function signUp(name: string): Promise<User> {
+  signUps += 1;
   const res = await app.inject({
     method: "POST",
     url: "/api/auth/sign-up/email",
+    remoteAddress: `10.0.${signUps}.1`,
     payload: { name, email: `${name}-${crypto.randomUUID()}@example.com`, password: "password123" },
   });
   expect(res.statusCode).toBe(200);
@@ -111,6 +116,7 @@ async function uploadBlob(user: User, project: string, body: string) {
 beforeAll(async () => {
   await runMigrations(pool);
   blobDir = await mkdtemp(join(tmpdir(), "blobs-"));
+  const rateLimits = memoryRateLimits();
   app = buildApp({
     db,
     auth: createAuth({
@@ -118,7 +124,10 @@ beforeAll(async () => {
       secret: "test-secret-test-secret-test-secret",
       baseURL: "http://localhost:5173",
       trustedOrigins: [],
+      rateLimits,
     }),
+    rateLimits,
+    quotas: { projectsPerUser: 10, storagePerUser: 64 * 1024 },
     events: { accessChanged: async (id) => void revoked.push(id) },
     compile,
     snapshots: async (id) => {
@@ -412,5 +421,61 @@ describe("csrf", () => {
       });
       expect(res.statusCode, origin).toBe(201);
     }
+  });
+});
+
+describe("limits", () => {
+  test("compiling is rate limited per user", async () => {
+    const user = await signUp("busy");
+    const p = await createProject(user, "Busy");
+    const compile = () => request(user, { method: "POST", url: `/api/projects/${p}/compile` });
+    for (let i = 0; i < RATE_LIMITS.compile.max; i++)
+      expect((await compile()).statusCode).toBe(202);
+    const res = await compile();
+    expect(res.statusCode).toBe(429);
+    expect(Number(res.headers["retry-after"])).toBeGreaterThan(0);
+    const other = await request(users.owner, {
+      method: "POST",
+      url: `/api/projects/${projectId}/compile`,
+    });
+    expect(other.statusCode).toBe(202);
+  });
+
+  test("a user can't own more projects than the quota", async () => {
+    const user = await signUp("hoarder");
+    for (let i = 0; i < 10; i++) await createProject(user, `P${i}`);
+    const res = await request(user, {
+      method: "POST",
+      url: "/api/projects",
+      payload: { name: "x" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  test("uploads by anyone count against the project owner's storage", async () => {
+    const owner = await signUp("uploader");
+    const editor = await signUp("helper");
+    const p = await createProject(owner, "Big files");
+    await join_(editor, await invite(owner, p, "editor"));
+    expect((await uploadBlob(owner, p, "a".repeat(40 * 1024))).statusCode).toBe(200);
+    expect((await uploadBlob(owner, p, "c".repeat(20 * 1024))).statusCode).toBe(200);
+    const res = await uploadBlob(editor, p, "b".repeat(10 * 1024));
+    expect(res.statusCode).toBe(413);
+    expect(res.json<{ error: string }>().error).toMatch(/storage is full/);
+    expect((await uploadBlob(editor, p, "small")).statusCode).toBe(200);
+  });
+
+  test("sign-in attempts are rate limited per IP", async () => {
+    const attempt = (remoteAddress: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/email",
+        remoteAddress,
+        headers: { "x-backslash-client-ip": "1.2.3.4" },
+        payload: { email: "nobody@example.com", password: "wrong-password" },
+      });
+    for (let i = 0; i < 10; i++) expect((await attempt("10.9.9.9")).statusCode).toBe(401);
+    expect((await attempt("10.9.9.9")).statusCode).toBe(429);
+    expect((await attempt("10.9.9.10")).statusCode).toBe(401);
   });
 });

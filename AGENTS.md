@@ -41,6 +41,16 @@ A pre-commit hook runs `vp check --fix` on staged files. Before you finish a cha
 - Code should explain itself through names and structure.
 - Follow the patterns already used in the app you are changing.
 
+## Tests
+
+- Unit tests only for logic that can realistically break: access control, concurrency, parsing, sandboxing, non-trivial data transformations. No tests for trivial functions, plain wiring or what a library already guarantees.
+- Prefer a few tests that cover a whole behavior over many small ones per function.
+- UI flows that matter (sign in, projects, editing, uploads, compiling, sharing) are covered by end-to-end tests. When you change one of them, update or add its e2e test.
+
+## UI changes
+
+After changing UI, run `vp run dev` and check the changed screens in a real browser: use the browser built into your environment, or the Playwright MCP server from `.mcp.json`. Check light and dark theme, a narrow (mobile) width, empty, loading and error states, and that the console has no errors. A passing `vp check` does not mean the UI works.
+
 ## Formatting
 
 Formatting is defined in the `fmt` block of the root `vite.config.ts`: 2-space indent, no tabs, double quotes, semicolons, trailing commas, LF, 100 columns. Do not add other formatter configs, and run `vp check --fix` instead of formatting by hand.

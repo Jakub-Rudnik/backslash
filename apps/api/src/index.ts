@@ -3,6 +3,7 @@ import { createAuth } from "@backslash/db/auth";
 import { buildApp } from "./app.ts";
 import { env } from "./config.ts";
 import { valkeyEvents } from "./lib/events.ts";
+import { valkeyRateLimits } from "./lib/rate-limit.ts";
 import { valkey } from "./lib/valkey.ts";
 import { queueBackend } from "./features/compile/compile.backend.ts";
 import { compileQueue, compileQueueEvents } from "./features/compile/compile.queue.ts";
@@ -16,6 +17,8 @@ const github =
     ? { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET }
     : undefined;
 
+const rateLimits = valkeyRateLimits(valkey);
+
 const app = buildApp({
   db,
   auth: createAuth({
@@ -24,6 +27,7 @@ const app = buildApp({
     baseURL: env.PUBLIC_URL,
     trustedOrigins: [env.PUBLIC_URL, ...env.WEB_ORIGIN],
     github,
+    rateLimits,
   }),
   events: valkeyEvents(valkey),
   compile: queueBackend(compileQueue, compileQueueEvents, env.COMPILE_DIR),
@@ -32,6 +36,11 @@ const app = buildApp({
   blobDir: env.BLOB_DIR,
   trustedOrigins: [env.PUBLIC_URL, ...env.WEB_ORIGIN],
   config: { github: github !== undefined },
+  rateLimits,
+  quotas: {
+    projectsPerUser: env.MAX_PROJECTS_PER_USER,
+    storagePerUser: env.MAX_STORAGE_PER_USER_MB * 1024 * 1024,
+  },
   logger: true,
   trustProxy: env.TRUST_PROXY,
 });

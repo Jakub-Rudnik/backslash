@@ -5,6 +5,8 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import * as z from "zod";
 import { requireProject } from "../../lib/access.ts";
+import { rateLimit } from "../../lib/rate-limit.ts";
+import type { RateLimitStore } from "@backslash/db/auth";
 import type { CompileBackend } from "./compile.backend.ts";
 import { compileScheduler } from "./compile.scheduler.ts";
 import { buildCompileRequest, nextCompileSeq } from "./compile.service.ts";
@@ -16,13 +18,14 @@ export type CompileRoutesOptions = {
   snapshots: SnapshotSource;
   publish: BuildPublisher;
   blobDir: string;
+  limits: RateLimitStore;
 };
 
 const PdfParams = z.object({ jobId: z.uuid() });
 
 export async function compileRoutes(
   app: FastifyInstance,
-  { db, backend, snapshots, publish, blobDir }: CompileRoutesOptions,
+  { db, backend, snapshots, publish, blobDir, limits }: CompileRoutesOptions,
 ) {
   const scheduler = compileScheduler({
     nextSeq: (projectId) => nextCompileSeq(db, projectId),
@@ -35,6 +38,7 @@ export async function compileRoutes(
   app.post("/projects/:id/compile", async (req, reply) => {
     const access = await requireProject(db, req, reply, "viewer");
     if (!access) return reply;
+    if (!(await rateLimit(limits, req, reply, "compile"))) return reply;
     const seq = await scheduler.request(access.projectId, access.user.name);
     if (seq === null) return reply.code(404).send({ error: "Project not found" });
     return reply.code(202).send({ seq } satisfies CompileStarted);
