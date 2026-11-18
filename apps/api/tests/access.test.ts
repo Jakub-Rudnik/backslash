@@ -7,7 +7,8 @@ import { createAuth } from "@backslash/db/auth";
 import type { CompileRequest, SharedBuild } from "@backslash/shared";
 import { createBlobFile, createFile, seedProject } from "@backslash/shared/doc";
 import type { FastifyInstance, InjectOptions } from "fastify";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vite-plus/test";
@@ -462,10 +463,20 @@ describe("limits", () => {
     await join_(editor, await invite(owner, p, "editor"));
     expect((await uploadBlob(owner, p, "a".repeat(40 * 1024))).statusCode).toBe(200);
     expect((await uploadBlob(owner, p, "c".repeat(20 * 1024))).statusCode).toBe(200);
-    const res = await uploadBlob(editor, p, "b".repeat(10 * 1024));
+    const rejected = "b".repeat(10 * 1024);
+    const res = await uploadBlob(editor, p, rejected);
     expect(res.statusCode).toBe(413);
+    const rejectedHash = createHash("sha256").update(rejected).digest("hex");
+    await expect(stat(join(blobDir, rejectedHash))).rejects.toThrow();
     expect(res.json<{ error: string }>().error).toMatch(/storage is full/);
     expect((await uploadBlob(editor, p, "small")).statusCode).toBe(200);
+
+    const full = await createProject(owner, "Full");
+    expect((await uploadBlob(owner, full, "a".repeat(40 * 1024))).statusCode).toBe(200);
+    const usage = (await request(owner, { method: "GET", url: "/api/account/usage" })).json<{
+      storage: { used: number };
+    }>();
+    expect(usage.storage.used).toBe(60 * 1024 + 5);
   });
 
   test("sign-in attempts are rate limited per IP", async () => {

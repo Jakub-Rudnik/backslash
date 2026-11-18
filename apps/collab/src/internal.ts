@@ -15,12 +15,14 @@ const ROUTE = /^\/(snapshot|build)\/([^/]+)$/;
 const MAX_BODY = 1_000_000;
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
-  let body = "";
-  for await (const chunk of req) {
-    body += String(chunk);
-    if (body.length > MAX_BODY) throw new Error("body too large");
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req as AsyncIterable<Buffer>) {
+    size += chunk.length;
+    if (size > MAX_BODY) throw new Error("body too large");
+    chunks.push(chunk);
   }
-  return JSON.parse(body);
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
 /**

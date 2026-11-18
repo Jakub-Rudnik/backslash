@@ -4,7 +4,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { saveCache } from "./cache.ts";
 import { env } from "./config.ts";
 import { parseLog } from "./parse-log.ts";
-import { INPUT_TOO_LARGE, OUTPUT, runLatexmk, type LatexmkRun } from "./sandbox.ts";
+import { INPUT_TOO_LARGE, OUTPUT, OUTPUT_FAILED, runLatexmk, type LatexmkRun } from "./sandbox.ts";
 
 const MAX_LOG_LENGTH = 200_000;
 
@@ -100,6 +100,7 @@ async function readResult(
 
   if (run.timedOut) return fail("Compilation timed out");
   if (run.code === INPUT_TOO_LARGE) return fail("Project is too large to compile");
+  if (run.code === OUTPUT_FAILED) return fail("Couldn't save the build output");
 
   const projectFiles = new Set(files.map((f) => f.path));
   const errors = texLog ? parseLog(texLog, projectFiles) : [];

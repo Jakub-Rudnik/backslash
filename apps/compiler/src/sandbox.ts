@@ -8,10 +8,12 @@ import { promisify } from "node:util";
 const MAX_OUTPUT_LENGTH = 200_000;
 const DISK_LIMIT_BYTES = 512 * 1024 * 1024;
 const TMP_LIMIT_BYTES = 64 * 1024 * 1024;
-const MEMORY_LIMIT_KB = 2 * 1024 * 1024;
+const MEMORY_LIMIT_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_PROCESSES = 64;
 /** exit code of the sandbox when the project files don't fit in /work */
 export const INPUT_TOO_LARGE = 90;
+/** exit code of the sandbox when the build's files couldn't be copied out */
+export const OUTPUT_FAILED = 91;
 
 /** -jobname: the PDF is output.pdf whatever the main file is called */
 export const OUTPUT = "output";
@@ -91,16 +93,19 @@ function bwrapArgs(inputDir: string, cacheDir: string, outputDir: string) {
 }
 
 const SCRIPT = `
-if [ -d /cache ]; then cp -R /cache/. /work/ 2>/dev/null; fi
 cp -R /in/. /work/ || exit ${INPUT_TOO_LARGE}
+if [ -d /cache ]; then cp -Rn /cache/. /work/ 2>/dev/null; fi
 touch /tmp/.started
-ulimit -u ${MAX_PROCESSES} -v ${MEMORY_LIMIT_KB}
-latexmk -pdf -norc -interaction=nonstopmode -halt-on-error -no-shell-escape -file-line-error \\
+prlimit --nproc=${MAX_PROCESSES} --as=${MEMORY_LIMIT_BYTES} -- \\
+  latexmk -pdf -norc -interaction=nonstopmode -halt-on-error -no-shell-escape -file-line-error \\
   -jobname=${OUTPUT} "./$1"
 code=$?
-find . -type f | while IFS= read -r f; do
-  if [ "$f" -nt /tmp/.started ] || [ ! -e "/in/$f" ]; then cp --parents -- "$f" /out/; fi
-done
+find . -type f > /tmp/.files || exit ${OUTPUT_FAILED}
+while IFS= read -r f; do
+  if [ "$f" -nt /tmp/.started ] || [ ! -e "/in/$f" ]; then
+    cp --parents -- "$f" /out/ || exit ${OUTPUT_FAILED}
+  fi
+done < /tmp/.files
 exit $code
 `;
 
@@ -163,7 +168,7 @@ export async function checkSandbox() {
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Compile sandbox unavailable (needs bubblewrap >= 0.10 and latexmk): ${detail}`,
+      `Compile sandbox unavailable (needs bubblewrap >= 0.10, latexmk and prlimit): ${detail}`,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });

@@ -43,8 +43,31 @@ function rejection(reason: string, message: string) {
   return Object.assign(new Error(message), { reason });
 }
 
+const ADMISSION_TIMEOUT_MS = 30_000;
+
+/**
+ * Connections that passed onAuthenticate but aren't attached to their document yet (it may still
+ * be loading). They count toward the limit, so parallel connects can't slip past it.
+ */
+const admissions = new Map<string, Set<symbol>>();
+
+function admit(userId: string) {
+  const pending = admissions.get(userId) ?? new Set<symbol>();
+  admissions.set(userId, pending);
+  const token = Symbol(userId);
+  pending.add(token);
+  setTimeout(() => release(userId, token), ADMISSION_TIMEOUT_MS).unref();
+}
+
+function release(userId: string, token?: symbol) {
+  const pending = admissions.get(userId);
+  if (!pending) return;
+  pending.delete(token ?? pending.values().next().value!);
+  if (pending.size === 0) admissions.delete(userId);
+}
+
 function connectionsOf(userId: string) {
-  let count = 0;
+  let count = admissions.get(userId)?.size ?? 0;
   for (const document of server.hocuspocus.documents.values()) {
     document.connections.forEach((_clients, connection) => {
       if (connection.context.userId === userId) count += 1;
@@ -93,11 +116,13 @@ const server = new Server<ConnectionContext>({
     if (connectionsOf(user.id) >= MAX_CONNECTIONS_PER_USER) {
       throw rejection("too-many-connections", "Too many open connections");
     }
+    admit(user.id);
     connectionConfig.readOnly = role === "viewer" || oversized.has(projectId.data);
     return { userId: user.id, role } satisfies ConnectionContext;
   },
 
   async connected({ connection, documentName }) {
+    release(connection.context.userId);
     await access.verify(connection, documentName);
   },
 
