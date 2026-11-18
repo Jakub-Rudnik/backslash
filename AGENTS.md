@@ -1,31 +1,57 @@
-<!--VITE PLUS START-->
+# backslash
 
-# Using Vite+, the Unified Toolchain for the Web
+LaTeX editor in the browser: projects with multiple files, real-time collaboration, compiling to PDF, sharing with other accounts.
 
-This project is using Vite+, a unified toolchain built on top of Vite, Rolldown, Vitest, tsdown, Oxlint, Oxfmt, and Vite Task. Vite+ wraps runtime management, package management, and frontend tooling in a single global CLI called `vp`. Vite+ is distinct from Vite, and it invokes Vite through `vp dev` and `vp build`. Run `vp help` to print a list of commands and `vp <command> --help` for information about a specific command.
+## Architecture
 
-Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.dev/guide/.
+pnpm monorepo, TypeScript everywhere. Postgres and Valkey run via `docker compose`.
 
-## Built-in Commands vs Scripts
+- `apps/web`: React SPA (React Router, TanStack Query, Base UI + shadcn, Tailwind, CodeMirror, pdf.js). Edits the Yjs doc through Hocuspocus.
+- `apps/api`: Fastify. Auth (Better Auth), projects, members, invites, file uploads, compile requests.
+- `apps/collab`: Hocuspocus server. One Yjs doc per project, persisted in Postgres.
+- `apps/compiler`: BullMQ worker that runs `latexmk` and returns the PDF and errors.
+- `packages/db`: Drizzle schema, migrations and client.
+- `packages/shared`: types, Zod schemas and Yjs doc helpers shared by the apps.
 
-`vp <name>` runs a built-in command. `vp run <name>` runs a `package.json` script or a `vite.config.ts` task. Scripts cannot overwrite built-ins, so `vp dev` and `vp run dev` may do different things. Check `package.json` and `vite.config.ts` first, and run `vp run <name>` when the project defines a script or task with that name.
+## Structure
 
-## Running Scripts
+- Group code by feature, not by kind. Files that change together live together.
+- `apps/web/src/features/<feature>`: components, hooks and helpers of one feature, flat in one folder. Shared code goes in `components/` (shadcn UI in `components/ui`), `hooks/` and `lib/`. `pages/` only holds routed pages.
+- `apps/api/src/features/<feature>`: routes, service and storage of one feature. Shared code goes in `src/lib`.
+- `apps/collab` and `apps/compiler` are small single-purpose services and stay flat.
+- No `index.ts` barrel files, no fixed set of subfolders per feature. Create a new feature folder only when the code doesn't belong to an existing one.
 
-Run TypeScript and JavaScript files with `vpx <file>`, for example `vpx ./scripts/seed.ts --dry-run`. It handles enums, decorators, JSX, and tsconfig `paths`, so do not add `tsx` or `ts-node` to run scripts. `vpx --watch <file>` reruns the file when a file it uses changes, in place of `tsx watch`. `vp node <file>` runs plain Node.js.
+## Toolchain
 
-## Tool Versions
+The toolchain is Vite+, run through the global `vp` CLI. Docs are in `node_modules/vite-plus/docs`.
 
-Run `vp toolchain` to show versions and relationships in the active Vite+
-release. Add a tool name to select part of the graph. For example, run
-`vp toolchain vite`. Use `--global` to ignore the local `vite-plus` package. Use
-`vp why <package>` to show the package-manager dependency graph.
+- `vp install` installs dependencies. Do not call pnpm, npm or npx directly.
+- `vp check` formats, lints and type checks; `vp check --fix` fixes what it can.
+- `vp run -r test` runs all tests. `vp run ready` runs check, tests and build.
+- `vp run dev` starts every app.
+- `vpx <file>` runs a TS script. Do not add tsx or ts-node.
+- `vp <name>` is a built-in command and `vp run <name>` is a `package.json` script. They can differ.
+- Import Vite and Vitest APIs from `vite-plus`; lint enforces this.
 
-## Review Checklist
+A pre-commit hook runs `vp check --fix` on staged files. Before you finish a change, run `vp check` and the tests of the apps you touched.
 
-- [ ] Run `vp install` after pulling remote changes and before getting started.
-- [ ] Run `vp check` and `vp test` to format, lint, type check and test changes.
-- [ ] Check if there are `vite.config.ts` tasks or `package.json` scripts necessary for validation, run via `vp run <script>`.
-- [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
+## Code
 
-<!--VITE PLUS END-->
+- Keep it simple. Solve the problem at hand without speculative abstractions, extra layers, unused options or generic helpers made for a single use. A few repeated lines are better than the wrong abstraction.
+- Code should explain itself through names and structure.
+- Follow the patterns already used in the app you are changing.
+
+## Formatting
+
+Formatting is defined in the `fmt` block of the root `vite.config.ts`: 2-space indent, no tabs, double quotes, semicolons, trailing commas, LF, 100 columns. Do not add other formatter configs, and run `vp check --fix` instead of formatting by hand.
+
+## Comments
+
+- Do not write comments that explain what the code does or narrate its steps.
+- No line or inline comments, TODO/FIXME notes or commented-out code.
+- JSDoc (`/** ... */`) is allowed above a function, method or class only when it adds something the name and signature don't already say. Most functions need none.
+- Allowed: short section headers that visually split a file (`/* Linting */` in tsconfig, `// --- members ---` in a long routes file) and tool directives (`// oxlint-disable-next-line`, `// @ts-expect-error`).
+
+## Files
+
+Do not create new Markdown files (notes, plans, summaries, docs) unless explicitly asked. Existing ones (`README.md`, `AGENTS.md`) may be edited.

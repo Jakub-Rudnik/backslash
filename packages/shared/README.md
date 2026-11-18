@@ -1,23 +1,3 @@
-# vite-plus-starter
+# @backslash/shared
 
-A starter for creating a Vite Plus project.
-
-## Development
-
-- Install dependencies:
-
-```bash
-vp install
-```
-
-- Run the unit tests:
-
-```bash
-vp test
-```
-
-- Build the library:
-
-```bash
-vp pack
-```
+Code shared by the apps: Zod schemas and types of the API, file path validation, limits, the compile queue contract and the Valkey channel names. `@backslash/shared/doc` describes the project structure inside the collab Yjs doc (files keyed by stable id, main file) and the helpers to read and change it.
