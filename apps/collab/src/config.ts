@@ -1,9 +1,11 @@
 import * as z from "zod";
 
-try {
-  process.loadEnvFile();
-} catch {
-  throw Error("Can't load .env file!");
+if (process.env.NODE_ENV !== "production") {
+  try {
+    process.loadEnvFile();
+  } catch {
+    throw Error("Can't load .env file!");
+  }
 }
 
 const Env = z.object({

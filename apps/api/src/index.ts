@@ -51,7 +51,7 @@ const app = buildApp({
   trustProxy: env.TRUST_PROXY,
 });
 
-app.listen({ port: env.PORT }, (err) => {
+app.listen({ host: env.HOST, port: env.PORT }, (err) => {
   if (err) {
     app.log.error(err);
     process.exit(1);

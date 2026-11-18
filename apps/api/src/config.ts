@@ -1,10 +1,12 @@
 import { resolve } from "node:path";
 import * as z from "zod";
 
-try {
-  process.loadEnvFile();
-} catch {
-  throw Error("Can't load .env file!");
+if (process.env.NODE_ENV !== "production") {
+  try {
+    process.loadEnvFile();
+  } catch {
+    throw Error("Can't load .env file!");
+  }
 }
 
 const list = (v: string) =>
@@ -15,6 +17,7 @@ const list = (v: string) =>
 
 const Env = z
   .object({
+    HOST: z.string().default("127.0.0.1"),
     PORT: z.coerce.number().int().positive().default(3000),
     TRUST_PROXY: z.string().default("loopback"),
     VALKEY_URL: z.url().default("valkey://127.0.0.1:6379"),
@@ -37,7 +40,7 @@ const Env = z
       .default("../../.data/blobs")
       .transform((p) => resolve(p)),
     /** smtp(s)://user:password@host:port; password reset is off without it */
-    SMTP_URL: z.url().optional(),
+    SMTP_URL: z.url().or(z.literal("")).optional(),
     MAIL_FROM: z.string().default("backslash <no-reply@localhost>"),
     MAX_PROJECTS_PER_USER: z.coerce.number().int().positive().default(100),
     /** uploaded files across all projects a user owns */
