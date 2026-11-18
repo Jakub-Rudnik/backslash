@@ -1,0 +1,1 @@
+ALTER TABLE "project_blobs" RENAME COLUMN "created_at" TO "registered_at";

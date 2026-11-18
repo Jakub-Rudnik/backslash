@@ -10,6 +10,7 @@ import { valkey } from "./lib/valkey.ts";
 import { queueBackend } from "./features/compile/compile.backend.ts";
 import { compileQueue, compileQueueEvents } from "./features/compile/compile.queue.ts";
 import { collabBuilds, collabSnapshots } from "./features/compile/collab.client.ts";
+import { collectGarbage } from "./features/blobs/blob.gc.ts";
 
 const { db, pool } = createDb(env.DATABASE_URL);
 await runMigrations(pool);
@@ -58,7 +59,22 @@ app.listen({ port: env.PORT }, (err) => {
   }
 });
 
+const HOUR = 60 * 60 * 1000;
+
+async function collectBlobs() {
+  try {
+    const result = await collectGarbage(db, env.BLOB_DIR, HOUR);
+    app.log.info(result, "blob garbage collection done");
+  } catch (err) {
+    app.log.error(err, "blob garbage collection failed");
+  }
+}
+
+void collectBlobs();
+const blobGcTimer = setInterval(() => void collectBlobs(), HOUR);
+
 async function shutdown() {
+  clearInterval(blobGcTimer);
   await app.close();
   await pool.end();
   await valkey.quit();

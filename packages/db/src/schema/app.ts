@@ -72,7 +72,10 @@ export const projectInvites = pgTable(
   (t) => [index("project_invites_project_id_idx").on(t.projectId)],
 );
 
-/** Which uploaded blobs a project may use; a hash alone grants nothing. */
+/**
+ * Which uploaded blobs a project may use; a hash alone grants nothing. Rows of files the project
+ * no longer uses are removed by the blob garbage collector, so storage quotas count them no more.
+ */
 export const projectBlobs = pgTable(
   "project_blobs",
   {
@@ -81,7 +84,8 @@ export const projectBlobs = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     hash: text("hash").notNull(),
     size: integer("size").notNull(),
-    createdAt: createdAt(),
+    /** last upload of this file to the project; unused files are kept for a while after it */
+    registeredAt: timestamp("registered_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.projectId, t.hash] }),
