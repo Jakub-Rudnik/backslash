@@ -36,6 +36,9 @@ const Env = z
       .string()
       .default("../../.data/blobs")
       .transform((p) => resolve(p)),
+    /** smtp(s)://user:password@host:port; password reset is off without it */
+    SMTP_URL: z.url().optional(),
+    MAIL_FROM: z.string().default("backslash <no-reply@localhost>"),
     MAX_PROJECTS_PER_USER: z.coerce.number().int().positive().default(100),
     /** uploaded files across all projects a user owns */
     MAX_STORAGE_PER_USER_MB: z.coerce.number().int().positive().default(1024),

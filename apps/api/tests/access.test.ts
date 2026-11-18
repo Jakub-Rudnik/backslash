@@ -24,6 +24,7 @@ const docs = new Map<string, Y.Doc>();
 const revoked: string[] = [];
 const jobs = new Map<string, { projectId: string; request: CompileRequest }>();
 const builds: { projectId: string; build: SharedBuild }[] = [];
+const resetMails: { email: string; url: string }[] = [];
 let blobDir: string;
 let app: FastifyInstance;
 
@@ -66,17 +67,18 @@ async function compileProject(user: User, project: string) {
 
 let signUps = 0;
 
-async function signUp(name: string): Promise<User> {
+async function signUp(name: string): Promise<User & { email: string }> {
   signUps += 1;
+  const email = `${name}-${crypto.randomUUID()}@example.com`;
   const res = await app.inject({
     method: "POST",
     url: "/api/auth/sign-up/email",
     remoteAddress: `10.0.${signUps}.1`,
-    payload: { name, email: `${name}-${crypto.randomUUID()}@example.com`, password: "password123" },
+    payload: { name, email, password: "password123" },
   });
   expect(res.statusCode).toBe(200);
   const cookie = [res.headers["set-cookie"]].flat()[0]!.split(";")[0]!;
-  return { cookie, id: res.json<{ user: { id: string } }>().user.id };
+  return { cookie, id: res.json<{ user: { id: string } }>().user.id, email };
 }
 
 async function createProject(owner: User, name = "Thesis") {
@@ -125,6 +127,7 @@ beforeAll(async () => {
       baseURL: "http://localhost:5173",
       trustedOrigins: [],
       rateLimits,
+      sendResetPassword: async ({ email }, url) => void resetMails.push({ email, url }),
     }),
     rateLimits,
     quotas: { projectsPerUser: 10, storagePerUser: 64 * 1024 },
@@ -137,7 +140,7 @@ beforeAll(async () => {
     publishBuild: async (projectId, build) => void builds.push({ projectId, build }),
     blobDir,
     trustedOrigins: ["http://localhost:5173"],
-    config: { github: false },
+    config: { github: false, passwordReset: true },
   });
   await app.ready();
 
@@ -477,5 +480,76 @@ describe("limits", () => {
     for (let i = 0; i < 10; i++) expect((await attempt("10.9.9.9")).statusCode).toBe(401);
     expect((await attempt("10.9.9.9")).statusCode).toBe(429);
     expect((await attempt("10.9.9.10")).statusCode).toBe(401);
+  });
+});
+
+describe("account", () => {
+  test("password reset mails a link, sets the new password and signs out everywhere", async () => {
+    const user = await signUp("forgetful");
+    const ask = (email: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/auth/request-password-reset",
+        remoteAddress: "10.8.0.1",
+        payload: { email, redirectTo: "/reset-password" },
+      });
+
+    expect((await ask("nobody-here@example.com")).statusCode).toBe(200);
+    expect((await ask(user.email)).statusCode).toBe(200);
+    await vi.waitFor(() => expect(resetMails.find((m) => m.email === user.email)).toBeDefined());
+    expect(resetMails.some((m) => m.email === "nobody-here@example.com")).toBe(false);
+
+    const { url } = resetMails.find((m) => m.email === user.email)!;
+    const token = new URL(url).pathname.split("/").at(-1)!;
+    const reset = await app.inject({
+      method: "POST",
+      url: "/api/auth/reset-password",
+      payload: { token, newPassword: "new-password-456" },
+    });
+    expect(reset.statusCode, reset.body).toBe(200);
+
+    expect((await request(user, { method: "GET", url: "/api/projects" })).statusCode).toBe(401);
+    const signIn = (password: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/email",
+        remoteAddress: "10.8.0.2",
+        payload: { email: user.email, password },
+      });
+    expect((await signIn("password123")).statusCode).toBe(401);
+    expect((await signIn("new-password-456")).statusCode).toBe(200);
+
+    const again = await app.inject({
+      method: "POST",
+      url: "/api/auth/reset-password",
+      payload: { token, newPassword: "third-password-789" },
+    });
+    expect(again.statusCode).toBe(400);
+  });
+
+  test("names are validated on update", async () => {
+    const user = await signUp("named");
+    const update = (name: string) =>
+      request(user, { method: "POST", url: "/api/auth/update-user", payload: { name } });
+    expect((await update("x".repeat(81))).statusCode).toBe(400);
+    expect((await update("   ")).statusCode).toBe(400);
+    expect((await update("New Name")).statusCode).toBe(200);
+  });
+
+  test("usage shows owned projects and stored bytes", async () => {
+    const user = await signUp("measured");
+    const p = await createProject(user, "Usage");
+    await uploadBlob(user, p, "12345");
+    const other = await createProject(user, "Usage 2");
+    await uploadBlob(user, other, "12345");
+    const usage = (await request(user, { method: "GET", url: "/api/account/usage" })).json<{
+      projects: { used: number; limit: number };
+      storage: { used: number; limit: number };
+    }>();
+    expect(usage.projects).toEqual({ used: 2, limit: 10 });
+    expect(usage.storage).toEqual({ used: 5, limit: 64 * 1024 });
+    expect((await request(null, { method: "GET", url: "/api/account/usage" })).statusCode).toBe(
+      401,
+    );
   });
 });

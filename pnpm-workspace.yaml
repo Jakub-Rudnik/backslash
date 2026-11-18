@@ -52,6 +52,8 @@ catalog:
   y-protocols: ^1.0.7
   yjs: ^13.6.33
   zod: ^4.6.7
+  nodemailer: ^10.6.0
+  "@types/nodemailer": ^8.0.2
 overrides:
   vite@*: "catalog:"
 peerDependencyRules:

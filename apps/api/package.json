@@ -38,11 +38,13 @@
     "drizzle-orm": "catalog:",
     "fastify": "catalog:",
     "iovalkey": "catalog:",
+    "nodemailer": "catalog:",
     "yjs": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "@types/nodemailer": "catalog:",
     "typescript": "^7.0.2",
     "vite-plus": "catalog:"
   }

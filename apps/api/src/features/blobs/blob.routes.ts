@@ -7,6 +7,7 @@ import { createReadStream } from "node:fs";
 import type { Readable } from "node:stream";
 import { requireProject } from "../../lib/access.ts";
 import { rateLimit } from "../../lib/rate-limit.ts";
+import { storageUsedBy } from "../../lib/usage.ts";
 import { blobExists, blobPath, BlobTooLargeError, storeBlob } from "./blob.store.ts";
 
 export type BlobRoutesOptions = {
@@ -16,21 +17,6 @@ export type BlobRoutesOptions = {
   /** bytes of uploaded files across all projects a user owns */
   storagePerUser: number;
 };
-
-/** Bytes used by the uploaded files of the project's owner, each file counted once. */
-async function ownerStorage(db: Db, projectId: string) {
-  const [project] = await db
-    .select({ ownerId: projects.ownerId })
-    .from(projects)
-    .where(eq(projects.id, projectId));
-  if (!project) return 0;
-  const blobs = await db
-    .selectDistinct({ hash: projectBlobs.hash, size: projectBlobs.size })
-    .from(projectBlobs)
-    .innerJoin(projects, eq(projects.id, projectBlobs.projectId))
-    .where(eq(projects.ownerId, project.ownerId));
-  return blobs.reduce((sum, b) => sum + b.size, 0);
-}
 
 const MB = 1024 * 1024;
 
@@ -51,7 +37,11 @@ export async function blobRoutes(
     }
     if (!(await rateLimit(limits, req, reply, "upload"))) return reply;
 
-    const free = storagePerUser - (await ownerStorage(db, access.projectId));
+    const [project] = await db
+      .select({ ownerId: projects.ownerId })
+      .from(projects)
+      .where(eq(projects.id, access.projectId));
+    const free = storagePerUser - (project ? await storageUsedBy(db, project.ownerId) : 0);
     const quotaError = `The project owner's storage is full (${Math.round(storagePerUser / MB)} MB)`;
     const tooLarge = (size: number) =>
       size > MAX_BLOB_SIZE ? "File too large" : size > free ? quotaError : null;

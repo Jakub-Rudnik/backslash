@@ -5,6 +5,7 @@ import Fastify, { type FastifyServerOptions } from "fastify";
 import { isTrustedOrigin, toHeaders } from "./lib/access.ts";
 import type { ProjectEvents } from "./lib/events.ts";
 import { rateLimit } from "./lib/rate-limit.ts";
+import { accountRoutes } from "./features/account/account.routes.ts";
 import { authRoutes } from "./features/auth/auth.routes.ts";
 import { blobRoutes } from "./features/blobs/blob.routes.ts";
 import type { CompileBackend } from "./features/compile/compile.backend.ts";
@@ -58,6 +59,7 @@ export function buildApp(deps: AppDeps) {
       api.register(healthRoutes);
       api.get("/config", async () => deps.config);
       api.register(authRoutes, { prefix: "/auth", auth: deps.auth });
+      api.register(accountRoutes, { db, quotas: deps.quotas });
       api.register(projectRoutes, {
         db,
         events: deps.events,

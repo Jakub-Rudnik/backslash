@@ -10,13 +10,14 @@ import {
   type ProjectSummary,
 } from "@backslash/shared";
 import { higherRole, projectInvites, projectMembers, projects, user, type Db } from "@backslash/db";
-import { and, count, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { createHash, randomBytes } from "node:crypto";
 import * as z from "zod";
 import { requireProject, requireUser } from "../../lib/access.ts";
 import type { ProjectEvents } from "../../lib/events.ts";
 import { rateLimit } from "../../lib/rate-limit.ts";
+import { ownedProjectCount } from "../../lib/usage.ts";
 import type { RateLimitStore } from "@backslash/db/auth";
 
 export type ProjectRoutesOptions = {
@@ -69,11 +70,7 @@ export async function projectRoutes(
     const body = CreateProject.safeParse(req.body);
     if (!body.success) return badRequest(reply, body.error);
     if (!(await rateLimit(limits, req, reply, "createProject"))) return reply;
-    const [owned] = await db
-      .select({ count: count() })
-      .from(projects)
-      .where(eq(projects.ownerId, me.id));
-    if ((owned?.count ?? 0) >= maxProjectsPerUser) {
+    if ((await ownedProjectCount(db, me.id)) >= maxProjectsPerUser) {
       return reply
         .code(403)
         .send({ error: `You can own at most ${maxProjectsPerUser} projects, delete one first` });

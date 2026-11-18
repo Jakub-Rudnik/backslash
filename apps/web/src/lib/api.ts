@@ -1,5 +1,6 @@
 import {
   UploadedBlob,
+  type AccountUsage,
   type CompileStarted,
   type CreatedInvite,
   type GrantableRole,
@@ -50,6 +51,7 @@ const project = (id: string) => `/projects/${encodeURIComponent(id)}`;
 
 export const api = {
   config: () => call<ServerConfig>("GET", "/config"),
+  usage: () => call<AccountUsage>("GET", "/account/usage"),
 
   projects: () => call<ProjectSummary[]>("GET", "/projects"),
   project: (id: string) => call<ProjectSummary>("GET", project(id)),

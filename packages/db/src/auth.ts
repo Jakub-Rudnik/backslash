@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import type { Db } from "./client.ts";
 import { account, session, user, verification } from "./schema/auth.ts";
@@ -23,7 +24,22 @@ export type AuthOptions = {
   github?: { clientId: string; clientSecret: string } | undefined;
   /** rate limits sign-in, sign-up and password resets per IP; off when not given */
   rateLimits?: RateLimitStore | undefined;
+  /** sends the password reset link; password reset is off when not given */
+  sendResetPassword?:
+    | ((user: { email: string; name: string }, url: string) => Promise<void>)
+    | undefined;
 };
+
+export const MAX_NAME_LENGTH = 80;
+
+function checkName(name: unknown) {
+  if (name === undefined) return;
+  if (typeof name !== "string" || !name.trim() || name.length > MAX_NAME_LENGTH) {
+    throw new APIError("BAD_REQUEST", {
+      message: `Name must be 1-${MAX_NAME_LENGTH} characters`,
+    });
+  }
+}
 
 export function createAuth({
   db,
@@ -32,6 +48,7 @@ export function createAuth({
   trustedOrigins,
   github,
   rateLimits,
+  sendResetPassword,
 }: AuthOptions) {
   return betterAuth({
     secret,
@@ -45,6 +62,27 @@ export function createAuth({
       enabled: true,
       minPasswordLength: 8,
       maxPasswordLength: 128,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: sendResetPassword
+        ? async ({ user, url }) => {
+            sendResetPassword(user, url).catch((err: unknown) =>
+              console.error("sending password reset mail failed:", err),
+            );
+          }
+        : undefined,
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => ({
+            data: {
+              ...user,
+              name: user.name.trim().slice(0, MAX_NAME_LENGTH) || user.email.split("@")[0]!,
+            },
+          }),
+        },
+        update: { before: async (user) => checkName(user.name) },
+      },
     },
     socialProviders: github ? { github } : {},
     trustedOrigins: (request) => {

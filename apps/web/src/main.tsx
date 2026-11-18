@@ -5,14 +5,18 @@ import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import "./index.css";
 import { RequireAuth } from "./features/auth/require-auth.tsx";
 import { DashboardPage } from "./pages/dashboard-page.tsx";
+import { ForgotPasswordPage } from "./pages/forgot-password-page.tsx";
 import { InvitePage } from "./pages/invite-page.tsx";
 import { LoginPage } from "./pages/login-page.tsx";
 import { ProjectPage } from "./pages/project-page.tsx";
+import { ResetPasswordPage } from "./pages/reset-password-page.tsx";
 import { queryClient } from "./lib/query-client.ts";
 
 const router = createBrowserRouter([
   { path: "/login", element: <LoginPage mode="sign-in" /> },
   { path: "/signup", element: <LoginPage mode="sign-up" /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
   {
     path: "/",
     element: (

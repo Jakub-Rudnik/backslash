@@ -3,6 +3,8 @@ import { createAuth } from "@backslash/db/auth";
 import { buildApp } from "./app.ts";
 import { env } from "./config.ts";
 import { valkeyEvents } from "./lib/events.ts";
+import { smtpMailer } from "./lib/mailer.ts";
+import { resetPasswordMail } from "./features/auth/auth.mails.ts";
 import { valkeyRateLimits } from "./lib/rate-limit.ts";
 import { valkey } from "./lib/valkey.ts";
 import { queueBackend } from "./features/compile/compile.backend.ts";
@@ -18,6 +20,7 @@ const github =
     : undefined;
 
 const rateLimits = valkeyRateLimits(valkey);
+const mailer = env.SMTP_URL ? smtpMailer(env.SMTP_URL, env.MAIL_FROM) : null;
 
 const app = buildApp({
   db,
@@ -28,6 +31,9 @@ const app = buildApp({
     trustedOrigins: [env.PUBLIC_URL, ...env.WEB_ORIGIN],
     github,
     rateLimits,
+    sendResetPassword: mailer
+      ? (user, url) => mailer({ to: user.email, ...resetPasswordMail(user.name, url) })
+      : undefined,
   }),
   events: valkeyEvents(valkey),
   compile: queueBackend(compileQueue, compileQueueEvents, env.COMPILE_DIR),
@@ -35,7 +41,7 @@ const app = buildApp({
   publishBuild: collabBuilds(env.COLLAB_INTERNAL_URL, env.INTERNAL_SECRET),
   blobDir: env.BLOB_DIR,
   trustedOrigins: [env.PUBLIC_URL, ...env.WEB_ORIGIN],
-  config: { github: github !== undefined },
+  config: { github: github !== undefined, passwordReset: mailer !== null },
   rateLimits,
   quotas: {
     projectsPerUser: env.MAX_PROJECTS_PER_USER,

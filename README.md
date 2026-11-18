@@ -10,7 +10,7 @@
 
 - Requirements: Node, Docker, TeX Live with `latexmk`, and bubblewrap (`bwrap`, Linux) for the compile sandbox.
 
-- Start Postgres and Valkey:
+- Start Postgres, Valkey and Mailpit (dev inbox for password reset mails at http://localhost:8025):
 
 ```bash
 docker compose up -d
