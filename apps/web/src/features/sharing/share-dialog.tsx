@@ -23,6 +23,7 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -55,8 +56,10 @@ function RoleSelect({
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="editor">Editor</SelectItem>
-        <SelectItem value="viewer">Viewer</SelectItem>
+        <SelectGroup>
+          <SelectItem value="editor">Editor</SelectItem>
+          <SelectItem value="viewer">Viewer</SelectItem>
+        </SelectGroup>
       </SelectContent>
     </Select>
   );
