@@ -1,7 +1,7 @@
 import { BlobHash, MAX_BLOB_SIZE, type UploadedBlob } from "@backslash/shared";
 import { projectBlobs, projects, type Db } from "@backslash/db";
 import type { RateLimitStore } from "@backslash/db/auth";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
 import { rm } from "node:fs/promises";
@@ -21,7 +21,7 @@ export type BlobRoutesOptions = {
 
 const MB = 1024 * 1024;
 
-async function ownerHasBlob(db: Db, ownerId: string, hash: string) {
+async function ownerHasBlob(db: Pick<Db, "select">, ownerId: string, hash: string) {
   const [row] = await db
     .select({ hash: projectBlobs.hash })
     .from(projectBlobs)
@@ -31,14 +31,52 @@ async function ownerHasBlob(db: Db, ownerId: string, hash: string) {
   return !!row;
 }
 
-/** Deletes a stored file no project references, so rejected uploads don't pile up on disk. */
-async function removeIfUnused(db: Db, dir: string, hash: string) {
-  const [used] = await db
+async function isReferenced(db: Pick<Db, "select">, hash: string) {
+  const [row] = await db
     .select({ hash: projectBlobs.hash })
     .from(projectBlobs)
     .where(eq(projectBlobs.hash, hash))
     .limit(1);
-  if (!used) await rm(blobPath(dir, hash), { force: true });
+  return !!row;
+}
+
+type Registration = "registered" | "over-quota" | "gone";
+
+/**
+ * Registers a stored file with the project, unless it would put the owner over quota; a rejected
+ * file no project uses is deleted. Runs under a per-hash lock, so a concurrent upload of the
+ * same content can't register a file this one is deleting (it sees it gone and asks to retry).
+ */
+async function register(
+  db: Db,
+  dir: string,
+  projectId: string,
+  blob: UploadedBlob,
+  storagePerUser: number,
+): Promise<Registration> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${blob.hash}, 0))`);
+    if (!(await blobExists(dir, blob.hash))) return "gone";
+
+    const [project] = await tx
+      .select({ ownerId: projects.ownerId })
+      .from(projects)
+      .where(eq(projects.id, projectId));
+    if (project && !(await ownerHasBlob(tx, project.ownerId, blob.hash))) {
+      const free = storagePerUser - (await storageUsedBy(tx, project.ownerId));
+      if (blob.size > free) {
+        if (!(await isReferenced(tx, blob.hash)))
+          await rm(blobPath(dir, blob.hash), { force: true });
+        return "over-quota";
+      }
+    }
+
+    await tx
+      .insert(projectBlobs)
+      .values({ projectId, hash: blob.hash, size: blob.size })
+      .onConflictDoNothing();
+    return "registered";
+  });
 }
 
 /** Uploaded files of a project: /api/projects/:id/blobs */
@@ -71,23 +109,14 @@ export async function blobRoutes(
       throw err;
     }
 
-    const [project] = await db
-      .select({ ownerId: projects.ownerId })
-      .from(projects)
-      .where(eq(projects.id, access.projectId));
-    if (project && !(await ownerHasBlob(db, project.ownerId, blob.hash))) {
-      const free = storagePerUser - (await storageUsedBy(db, project.ownerId));
-      if (blob.size > free) {
-        await removeIfUnused(db, dir, blob.hash);
-        const limit = Math.round(storagePerUser / MB);
-        return reply.code(413).send({ error: `The project owner's storage is full (${limit} MB)` });
-      }
+    const registration = await register(db, dir, access.projectId, blob, storagePerUser);
+    if (registration === "over-quota") {
+      const limit = Math.round(storagePerUser / MB);
+      return reply.code(413).send({ error: `The project owner's storage is full (${limit} MB)` });
     }
-
-    await db
-      .insert(projectBlobs)
-      .values({ projectId: access.projectId, hash: blob.hash, size: blob.size })
-      .onConflictDoNothing();
+    if (registration === "gone") {
+      return reply.code(503).send({ error: "Upload interrupted, please try again" });
+    }
     return blob;
   });
 

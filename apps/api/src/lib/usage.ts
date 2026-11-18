@@ -10,7 +10,7 @@ export async function ownedProjectCount(db: Db, userId: string) {
 }
 
 /** Bytes of uploaded files across the projects a user owns, each file counted once. */
-export async function storageUsedBy(db: Db, userId: string) {
+export async function storageUsedBy(db: Pick<Db, "selectDistinct">, userId: string) {
   const blobs = await db
     .selectDistinct({ hash: projectBlobs.hash, size: projectBlobs.size })
     .from(projectBlobs)

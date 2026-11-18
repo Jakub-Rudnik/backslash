@@ -479,6 +479,27 @@ describe("limits", () => {
     expect(usage.storage.used).toBe(60 * 1024 + 5);
   });
 
+  test("a rejected upload never deletes a file another upload just registered", async () => {
+    const full = await signUp("full");
+    const roomy = await signUp("roomy");
+    const pf = await createProject(full, "Full");
+    const pr = await createProject(roomy, "Roomy");
+    expect((await uploadBlob(full, pf, "f".repeat(60 * 1024))).statusCode).toBe(200);
+    for (let i = 0; i < 5; i++) {
+      const content = `${i}`.repeat(10 * 1024);
+      const [rejected, accepted] = await Promise.all([
+        uploadBlob(full, pf, content),
+        uploadBlob(roomy, pr, content),
+      ]);
+      expect(rejected.statusCode).toBe(413);
+      expect([200, 503]).toContain(accepted.statusCode);
+      if (accepted.statusCode === 200) {
+        const hash = createHash("sha256").update(content).digest("hex");
+        await expect(stat(join(blobDir, hash))).resolves.toBeDefined();
+      }
+    }
+  });
+
   test("sign-in attempts are rate limited per IP", async () => {
     const attempt = (remoteAddress: string) =>
       app.inject({
