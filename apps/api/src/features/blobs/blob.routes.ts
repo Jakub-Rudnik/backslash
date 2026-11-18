@@ -9,6 +9,7 @@ import type { Readable } from "node:stream";
 import { requireProject } from "../../lib/access.ts";
 import { rateLimit } from "../../lib/rate-limit.ts";
 import { storageUsedBy } from "../../lib/usage.ts";
+import { isReferenced, lockBlob } from "./blob.gc.ts";
 import { blobExists, blobPath, BlobTooLargeError, storeBlob } from "./blob.store.ts";
 
 export type BlobRoutesOptions = {
@@ -31,21 +32,14 @@ async function ownerHasBlob(db: Pick<Db, "select">, ownerId: string, hash: strin
   return !!row;
 }
 
-async function isReferenced(db: Pick<Db, "select">, hash: string) {
-  const [row] = await db
-    .select({ hash: projectBlobs.hash })
-    .from(projectBlobs)
-    .where(eq(projectBlobs.hash, hash))
-    .limit(1);
-  return !!row;
-}
-
 type Registration = "registered" | "over-quota" | "gone";
 
 /**
  * Registers a stored file with the project, unless it would put the owner over quota; a rejected
- * file no project uses is deleted. Runs under a per-hash lock, so a concurrent upload of the
- * same content can't register a file this one is deleting (it sees it gone and asks to retry).
+ * file no project uses is deleted. Runs under the per-hash lock, so a concurrent upload or garbage
+ * collection of the same content can't register a file another one is deleting (it sees it gone
+ * and asks to retry). Re-registering refreshes the row, which keeps it from being collected before
+ * the doc that uses the file again is saved.
  */
 async function register(
   db: Db,
@@ -55,7 +49,7 @@ async function register(
   storagePerUser: number,
 ): Promise<Registration> {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${blob.hash}, 0))`);
+    await lockBlob(tx, blob.hash);
     if (!(await blobExists(dir, blob.hash))) return "gone";
 
     const [project] = await tx
@@ -74,7 +68,10 @@ async function register(
     await tx
       .insert(projectBlobs)
       .values({ projectId, hash: blob.hash, size: blob.size })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: [projectBlobs.projectId, projectBlobs.hash],
+        set: { registeredAt: sql`now()` },
+      });
     return "registered";
   });
 }
