@@ -3,12 +3,12 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
-import { FullPageMessage } from "@/components/require-auth";
-import { formField, safeNext } from "@/lib/account";
+import { FullPageMessage } from "@/features/auth/require-auth";
+import { formField, safeNext } from "@/features/auth/account";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import { authClient } from "@/lib/auth-client";
+import { authClient } from "@/features/auth/auth-client";
 
 type Mode = "sign-in" | "sign-up";
 

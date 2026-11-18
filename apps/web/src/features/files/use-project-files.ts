@@ -17,7 +17,7 @@ import {
   type FileContent,
 } from "@backslash/shared/doc";
 import { useEffect, useMemo, useState } from "react";
-import type { CollabSession } from "@/hooks/use-collab";
+import type { CollabSession } from "@/features/editor/use-collab";
 
 type FilesState = { files: DocFile[]; mainId: string | null };
 
@@ -50,7 +50,6 @@ export function useProjectFiles(session: CollabSession | null) {
     };
   }, [session]);
 
-  // actions throw on invalid/taken paths; validate first to show a message
   const actions = useMemo(() => {
     const doc = () => {
       if (!session) throw new Error("Not connected");

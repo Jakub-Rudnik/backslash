@@ -48,7 +48,6 @@ test("create, rename, delete", () => {
   renameFile(doc, id, "ch/a.tex");
   expect(listFiles(doc).map((f) => f.path)).toEqual(["ch/a.tex"]);
   expect(content(listFiles(doc)[0])).toBe("x");
-  // renaming onto itself is fine
   expect(validatePath(doc, "ch/a.tex", id)).toBeNull();
 
   deleteFile(doc, id);
@@ -132,7 +131,6 @@ test("blob files and replacing content", () => {
   replaceFile(doc, tex, { text: "new" });
   expect(content(listFiles(doc).find((f) => f.id === tex))).toBe("new");
 
-  // kind changes keep the id
   replaceFile(doc, tex, { hash: HASH, size: 1 });
   expect(listFiles(doc).find((f) => f.id === tex)?.kind).toBe("blob");
   replaceFile(doc, tex, { text: "back" });
@@ -167,7 +165,6 @@ test("file count limit", () => {
   const doc = new Y.Doc();
   for (let i = 0; i < 200; i++) createFile(doc, `f${i}.tex`);
   expect(() => createFile(doc, "one-more.tex")).toThrow(/at most/);
-  // renames still work at the limit
   expect(validatePath(doc, "renamed.tex", listFiles(doc)[0]!.id)).toBeNull();
 });
 

@@ -1,13 +1,11 @@
 import { extension } from "@backslash/shared";
 
-// a Map, not an object: extensions like "constructor" must not hit Object.prototype
 const PREVIEWABLE = new Map([
   ["png", "image/png"],
   ["jpg", "image/jpeg"],
   ["jpeg", "image/jpeg"],
   ["gif", "image/gif"],
   ["webp", "image/webp"],
-  // rendered via <img> only, which never runs scripts inside the SVG
   ["svg", "image/svg+xml"],
   ["pdf", "application/pdf"],
 ]);

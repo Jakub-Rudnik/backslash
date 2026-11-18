@@ -1,10 +1,7 @@
 import type { CompileError } from "@backslash/shared";
 
-// -file-line-error format: "./ch/intro.tex:12: Undefined control sequence."
 const FILE_LINE_ERROR = /^(\S+?):(\d+): (.*)$/;
-// classic format: "! msg" followed by "l.<n> ..." (TeX still uses it for some errors)
 const LINE_REF = /^l\.(\d+)/;
-// how far after a "!" line to look for its "l.<n>" line reference
 const LOOKAHEAD = 12;
 
 function projectPath(file: string, projectFiles: ReadonlySet<string>) {
@@ -43,7 +40,6 @@ export function parseLog(log: string, projectFiles: ReadonlySet<string>): Compil
     }
 
     if (!error) continue;
-    // follow-up noise after the real error
     if (error.message.startsWith("==>")) continue;
     if (error.message === "Emergency stop." && errors.length > 0) continue;
     errors.push(error);

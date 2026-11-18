@@ -118,8 +118,6 @@ function replaceFile(doc: Y.Doc, id: string, content: FileContent) {
   if (!entry) return;
   doc.transact(() => {
     if ("text" in content) {
-      // a new Y.Text instead of editing the old one: concurrent replaces then resolve
-      // to one winner, instead of Yjs merging both inserted documents into one text
       entry.delete("hash");
       entry.delete("size");
       entry.set("content", new Y.Text(content.text));

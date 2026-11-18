@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
 import * as Y from "yjs";
 import { buildApp } from "../src/app.ts";
-import type { CompileBackend } from "../src/modules/compile/compile.backend.ts";
+import type { CompileBackend } from "../src/features/compile/compile.backend.ts";
 
 const DB_URL =
   process.env.TEST_DATABASE_URL ?? "postgres://backslash:backslash@127.0.0.1:5432/backslash_test";
@@ -31,7 +31,6 @@ const compile: CompileBackend = {
     return { jobId, status: "success", log: JSON.stringify(request), errors: [] };
   },
   projectOf: async (jobId) => jobs.get(jobId) ?? null,
-  // no real PDFs: an existing project file is enough to test the access path
   pdfPath: () => join(import.meta.dirname, "access.test.ts"),
 };
 
@@ -230,7 +229,6 @@ describe("access matrix", () => {
 describe("cross-project isolation", () => {
   let other: string;
   beforeAll(async () => {
-    // the stranger's own project
     other = await createProject(users.stranger, "Other");
   });
 
@@ -249,7 +247,6 @@ describe("cross-project isolation", () => {
     const { hash } = (await uploadBlob(users.owner, projectId, "another secret")).json<{
       hash: string;
     }>();
-    // a malicious client writes the hash into its own project's doc
     createBlobFile(docs.get(other)!, "stolen.png", hash, 14);
     const res = await request(users.stranger, {
       method: "POST",
@@ -391,7 +388,6 @@ describe("csrf", () => {
 
   test("same-origin and trusted origins pass", async () => {
     for (const origin of ["http://localhost:5173", "http://192.168.1.5:5173"]) {
-      // inject requests are plain http
       const res = await request(users.owner, {
         method: "POST",
         url: "/api/projects",

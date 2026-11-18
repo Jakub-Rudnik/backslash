@@ -1,6 +1,6 @@
 import { WebSocketStatus } from "@hocuspocus/provider";
 import { cn } from "cn";
-import type { Peer } from "@/hooks/use-collab";
+import type { Peer } from "@/features/editor/use-collab";
 import { initials, type CollabUser } from "@/lib/user";
 
 type CollabStatusProps = {
@@ -38,7 +38,6 @@ function Avatar({
 }
 
 export function CollabStatus({ status, me, peers: all }: CollabStatusProps) {
-  // one avatar per person (several tabs share one), not ourselves
   const peers = all.filter(
     (p, i) => p.user.id !== me.id && all.findIndex((q) => q.user.id === p.user.id) === i,
   );
@@ -72,7 +71,6 @@ export function CollabStatus({ status, me, peers: all }: CollabStatusProps) {
           </span>
         )}
       </div>
-      {/* our own avatar is the account menu; here just the connection state */}
       <span
         role="status"
         title={label}

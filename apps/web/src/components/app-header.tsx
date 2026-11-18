@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { UserMenu } from "@/components/user-menu";
+import { UserMenu } from "@/features/auth/user-menu";
 import { useTheme } from "@/hooks/use-theme";
 
 /** Top bar: logo (to the dashboard), page-specific content, theme toggle and account menu. */

@@ -1,4 +1,3 @@
-// Tables used by Better Auth (field names must match its models).
 import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {

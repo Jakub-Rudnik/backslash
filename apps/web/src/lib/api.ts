@@ -28,16 +28,13 @@ async function errorMessage(res: Response) {
     const body: unknown = await res.json();
     if (body && typeof body === "object" && "error" in body) {
       if (typeof body.error === "string") return body.error;
-      // zod flattenError: { formErrors: string[], fieldErrors: Record<string, string[]> }
       const flat = body.error as { formErrors?: unknown; fieldErrors?: Record<string, unknown> };
       const messages = [flat.formErrors, ...Object.values(flat.fieldErrors ?? {})]
         .flatMap((m) => (Array.isArray(m) ? m : []))
         .filter((m): m is string => typeof m === "string");
       if (messages.length > 0) return messages.join(", ");
     }
-  } catch {
-    // non-JSON body
-  }
+  } catch {}
   return `Request failed (${res.status})`;
 }
 
@@ -103,7 +100,6 @@ export function blobUrl(projectId: string, hash: string) {
 export async function fetchBlob(projectId: string, hash: string, type = ""): Promise<Blob> {
   const res = await fetch(blobUrl(projectId, hash));
   if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
-  // the server always says octet-stream; give the browser the real type for <img>/PDF
   return new Blob([await res.arrayBuffer()], { type });
 }
 

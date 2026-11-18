@@ -11,7 +11,6 @@ export type BlobRoutesOptions = { db: Db; dir: string };
 
 /** Uploaded files of a project: /api/projects/:id/blobs */
 export async function blobRoutes(app: FastifyInstance, { db, dir }: BlobRoutesOptions) {
-  // raw body as a stream; size is enforced while streaming (bodyLimit doesn't apply here)
   app.addContentTypeParser("application/octet-stream", (_req, payload, done) =>
     done(null, payload),
   );
@@ -30,13 +29,10 @@ export async function blobRoutes(app: FastifyInstance, { db, dir }: BlobRoutesOp
       blob = await storeBlob(dir, req.body as Readable, MAX_BLOB_SIZE);
     } catch (err) {
       if (err instanceof BlobTooLargeError) {
-        // the client may still be sending; don't keep reading it
         return reply.code(413).header("Connection", "close").send({ error: "File too large" });
       }
       throw err;
     }
-    // the project may use this blob from now on (content dedup across projects is fine:
-    // the uploader proved they have the bytes)
     await db
       .insert(projectBlobs)
       .values({ projectId: access.projectId, hash: blob.hash, size: blob.size })
@@ -57,17 +53,12 @@ export async function blobRoutes(app: FastifyInstance, { db, dir }: BlobRoutesOp
       return reply.code(404).send({ error: "Not found" });
     }
 
-    // user content: never let the browser render it as a page on our origin.
-    // The web app reads it with fetch() and picks the type itself.
-    return (
-      reply
-        .type("application/octet-stream")
-        .header("X-Content-Type-Options", "nosniff")
-        .header("Content-Security-Policy", "default-src 'none'; sandbox")
-        .header("Content-Disposition", "attachment")
-        // never cached: another account in the same browser must go through the access check
-        .header("Cache-Control", "private, no-store")
-        .send(createReadStream(blobPath(dir, hash.data)))
-    );
+    return reply
+      .type("application/octet-stream")
+      .header("X-Content-Type-Options", "nosniff")
+      .header("Content-Security-Policy", "default-src 'none'; sandbox")
+      .header("Content-Disposition", "attachment")
+      .header("Cache-Control", "private, no-store")
+      .send(createReadStream(blobPath(dir, hash.data)));
   });
 }

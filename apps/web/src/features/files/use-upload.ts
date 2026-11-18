@@ -10,10 +10,10 @@ import {
 } from "@backslash/shared";
 import type { FileContent } from "@backslash/shared/doc";
 import { useRef, useState } from "react";
-import type { ProjectFiles } from "@/hooks/use-project-files";
+import type { ProjectFiles } from "@/features/files/use-project-files";
 import { uploadBlob } from "@/lib/api";
-import { formatSize } from "@/lib/mime";
-import { fromZip, isIgnored, type RawUpload } from "@/lib/upload-sources";
+import { formatSize } from "@/features/files/mime";
+import { fromZip, isIgnored, type RawUpload } from "@/features/files/upload-sources";
 
 type Item = { path: string; data: Blob };
 
@@ -25,9 +25,7 @@ async function toContent(projectId: string, { path, data }: Item): Promise<FileC
     try {
       const text = new TextDecoder("utf-8", { fatal: true }).decode(await data.arrayBuffer());
       return { text };
-    } catch {
-      // not UTF-8 (e.g. latin-1 .tex), keep the bytes as they are
-    }
+    } catch {}
   }
   if (data.size > MAX_BLOB_SIZE) {
     throw new Error(`too large (${formatSize(data.size)}, max ${formatSize(MAX_BLOB_SIZE)})`);
@@ -64,14 +62,12 @@ async function prepare(raw: RawUpload[], dir: string, existing: Set<string>, fai
     }
   }
 
-  // sanitize, last one wins for duplicate paths
   const byPath = new Map<string, Item>();
   for (const r of expanded.filter((r) => !isIgnored(r.path))) {
     const path = sanitizePath(dir ? `${dir}/${r.path}` : r.path);
     byPath.set(path, { path, data: r.data });
   }
 
-  // validate against the project plus what this upload adds before it
   const taken = [...existing];
   const items: Item[] = [];
   for (const item of byPath.values()) {
@@ -107,7 +103,6 @@ export function useUpload(
   const [pending, setPending] = useState<{ items: Item[]; replacing: string[] } | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
-  // ref, not state: must block a second start() before the next render
   const busy = useRef(false);
   const [isBusy, setIsBusy] = useState(false);
 
@@ -157,7 +152,6 @@ export function useUpload(
       report(...failed);
       const replacing = items.filter((i) => existing.has(i.path)).map((i) => i.path);
       if (replacing.length > 0) {
-        // stays busy until confirm/cancel
         setPending({ items, replacing });
         return;
       }

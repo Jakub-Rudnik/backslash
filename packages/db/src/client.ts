@@ -13,12 +13,10 @@ export function createDb(url: string) {
 }
 
 const MIGRATIONS = fileURLToPath(new URL("../drizzle", import.meta.url));
-// arbitrary constant: api and collab may start together, only one migrates at a time
 const MIGRATION_LOCK = 7_310_219;
 
 /** Applies pending migrations; safe to call from several services at startup. */
 export async function runMigrations(pool: pg.Pool) {
-  // one connection holds the lock and runs the migrations
   const client = await pool.connect();
   try {
     await client.query("select pg_advisory_lock($1)", [MIGRATION_LOCK]);

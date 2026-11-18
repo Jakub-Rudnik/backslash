@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router";
-import { FullPageMessage } from "@/components/require-auth";
+import { FullPageMessage } from "@/features/auth/require-auth";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 

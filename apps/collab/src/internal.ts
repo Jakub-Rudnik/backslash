@@ -29,7 +29,6 @@ export function internalServer(
     try {
       raw = decodeURIComponent(match[1]!);
     } catch {
-      // malformed percent-encoding
       return res.writeHead(404).end();
     }
     const id = ProjectId.safeParse(raw);
@@ -37,7 +36,6 @@ export function internalServer(
 
     try {
       if (!(await projectExists(id.data))) return res.writeHead(404).end();
-      // loads the doc if nobody has it open
       const connection = await hocuspocus.openDirectConnection(id.data);
       try {
         const state = Y.encodeStateAsUpdate(connection.document!);

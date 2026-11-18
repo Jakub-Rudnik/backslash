@@ -37,11 +37,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Peer } from "@/hooks/use-collab";
-import type { ProjectFiles } from "@/hooks/use-project-files";
-import type { useUpload } from "@/hooks/use-upload";
-import { previewType } from "@/lib/mime";
-import { fromDataTransfer, fromFileList } from "@/lib/upload-sources";
+import type { Peer } from "@/features/editor/use-collab";
+import type { ProjectFiles } from "@/features/files/use-project-files";
+import type { useUpload } from "@/features/files/use-upload";
+import { previewType } from "@/features/files/mime";
+import { fromDataTransfer, fromFileList } from "@/features/files/upload-sources";
 
 type FileTreeProps = {
   project: ProjectFiles;
@@ -123,7 +123,6 @@ function PathInput({
   return (
     <div className="py-0.5 pr-2" style={indent(depth)}>
       <input
-        // focus the input as soon as it appears; selecting the name part like file managers do
         ref={(el) => {
           if (!el || el.dataset.ready) return;
           el.dataset.ready = "1";
@@ -192,7 +191,6 @@ export function FileTree({
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadDir = useRef("");
-  // pending edits/deletes are dropped when we become read-only (role changed while open)
   const [editingState, setEditing] = useState<Editing | null>(null);
   const [deletingState, setDeleting] = useState<Deleting | null>(null);
   const editing = readOnly ? null : editingState;
@@ -217,11 +215,9 @@ export function FileTree({
 
   function onDrop(e: DragEvent) {
     if (!hasFiles(e)) return;
-    // always cancel, or the browser opens the dropped file instead of the project
     e.preventDefault();
     if (readOnly) return;
     setDragging(false);
-    // dropped on a folder row -> into it, on a file row -> next to it, elsewhere -> root
     const target = (e.target as HTMLElement).closest<HTMLElement>("[data-dir]");
     const dir = target?.dataset.dir ?? "";
     fromDataTransfer(e.dataTransfer)
@@ -238,7 +234,6 @@ export function FileTree({
     setEditing({ kind: "create", dir });
   }
 
-  // actions validate first, so they only throw on a race with another client
   function attempt(validate: () => string | null, run: () => void): string | null {
     if (readOnly) return "Read-only";
     const error = validate();
@@ -387,7 +382,6 @@ export function FileTree({
           type="button"
           onClick={() => onOpen(file.id)}
           className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left"
-          // align with folder names (past the chevron)
           style={{ paddingLeft: indent(depth).paddingLeft + 20 }}
         >
           <HugeiconsIcon icon={fileIcon(file)} className="size-4 shrink-0 text-muted-foreground" />
@@ -485,7 +479,6 @@ export function FileTree({
           hidden
           onChange={(e) => {
             const files = e.target.files;
-            // start() reports its own errors, never rejects
             if (files?.length) void upload.start(fromFileList(files), uploadDir.current);
             e.target.value = "";
           }}

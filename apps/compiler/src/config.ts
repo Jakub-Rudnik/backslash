@@ -10,18 +10,15 @@ try {
 const Env = z.object({
   VALKEY_URL: z.url().default("valkey://127.0.0.1:6379"),
   CONCURRENCY: z.coerce.number().int().min(1).max(32).default(2),
-  // keep below the API wait (60s) so the API gets a result instead of a timeout
   COMPILE_TIMEOUT_MS: z.coerce.number().int().min(1000).max(55_000).default(30_000),
   COMPILE_DIR: z
     .string()
     .default("../../.data/compiles")
     .transform((p) => resolve(p)),
-  // uploaded files (written by the API), copied into the job dir by hash
   BLOB_DIR: z
     .string()
     .default("../../.data/blobs")
     .transform((p) => resolve(p)),
-  // how long compile dirs (and PDFs) are kept; matches queue removeOnComplete
   COMPILE_TTL_MS: z.coerce.number().int().positive().default(3_600_000),
 });
 

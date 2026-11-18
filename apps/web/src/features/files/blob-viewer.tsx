@@ -4,17 +4,16 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "cn";
 import { useEffect, useState } from "react";
-import { PdfViewer } from "@/components/pdf-viewer";
+import { PdfViewer } from "@/features/compile/pdf-viewer";
 import { buttonVariants } from "@/components/ui/button";
 import { blobUrl, fetchBlob } from "@/lib/api";
-import { formatSize, previewType } from "@/lib/mime";
+import { formatSize, previewType } from "@/features/files/mime";
 
 function useObjectUrl(blob: Blob | undefined) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!blob) return;
     const next = URL.createObjectURL(blob);
-    // object URL is an external resource owned by this effect
     // oxlint-disable-next-line react/set-state-in-effect
     setUrl(next);
     return () => {
@@ -41,7 +40,6 @@ export function BlobViewer({
     queryKey: ["blob", projectId, file.hash, type],
     queryFn: () => fetchBlob(projectId, file.hash, type ?? ""),
     enabled: type !== null,
-    // content-addressed, never changes
     staleTime: Infinity,
   });
   const url = useObjectUrl(data);

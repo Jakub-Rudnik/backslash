@@ -36,7 +36,6 @@ export function documentStore(db: Db) {
           await tx.update(projects).set({ updatedAt: now }).where(eq(projects.id, projectId));
         });
       } catch (err) {
-        // project deleted while the doc was still open: nothing to save it to
         if ((err as { cause?: { code?: string } }).cause?.code === FOREIGN_KEY_VIOLATION) return;
         if ((err as { code?: string }).code === FOREIGN_KEY_VIOLATION) return;
         throw err;

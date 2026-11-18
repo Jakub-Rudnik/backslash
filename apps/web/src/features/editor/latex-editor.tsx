@@ -57,7 +57,6 @@ const fullHeight = EditorView.theme({
   ".cm-scroller": { overflow: "auto" },
 });
 
-// colors come from the app's CSS variables, so the editor follows light/dark
 const appTheme = EditorView.theme({
   "&": { backgroundColor: "var(--background)", color: "var(--foreground)" },
   ".cm-content": { caretColor: "var(--foreground)" },
@@ -86,8 +85,6 @@ function themeExtensions(dark: boolean) {
     : [];
 }
 
-// codemirror's basicSetup minus history(): undo/redo is handled by Y.UndoManager
-// (only undoes your own changes, not collaborators')
 const setup = [
   lineNumbers(),
   highlightActiveLineGutter(),
@@ -172,7 +169,6 @@ export function LatexEditor({
     });
   }, [readOnly]);
 
-  // renames (by anyone) can change the extension without remounting
   useEffect(() => {
     pathRef.current = path;
     viewRef.current?.dispatch({
@@ -180,7 +176,6 @@ export function LatexEditor({
     });
   }, [path]);
 
-  // runs after the view effect above, so a reveal for a newly opened file sees its view
   useEffect(() => {
     const view = viewRef.current;
     if (!view || !reveal) return;

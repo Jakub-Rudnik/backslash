@@ -26,10 +26,7 @@ export async function storeBlob(dir: string, input: Readable, maxSize: number) {
     },
   });
 
-  // write to a temp name first, so a half-written upload never shows up under a hash
   const tmp = join(dir, `.tmp-${randomUUID()}`);
-  // input is piped (not part of the pipeline): on a size error the pipeline would destroy
-  // the request socket before the route could send its 413
   const written = pipeline(meter, createWriteStream(tmp));
   const onInputError = (err: Error) => meter.destroy(err);
   input.on("error", onInputError);
@@ -37,11 +34,9 @@ export async function storeBlob(dir: string, input: Readable, maxSize: number) {
   try {
     await written;
     const digest = hash.digest("hex");
-    // same content already stored: rename just replaces it with identical bytes
     await rename(tmp, blobPath(dir, digest));
     return { hash: digest, size };
   } catch (err) {
-    // stop writing, discard the rest of the body
     input.unpipe(meter);
     input.resume();
     throw err;

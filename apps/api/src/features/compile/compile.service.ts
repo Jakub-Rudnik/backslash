@@ -31,7 +31,6 @@ export async function buildCompileRequest(
   doc.destroy();
   if (!main) throw new CompileInputError("Add a .tex file to compile");
 
-  // blob hashes in the doc are written by clients: only allow ones uploaded to this project
   const hashes = [...new Set(files.flatMap((f) => ("hash" in f ? [f.hash] : [])))];
   const registered = new Set(
     hashes.length === 0

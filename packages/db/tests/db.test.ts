@@ -21,7 +21,6 @@ const auth = createAuth({
 });
 
 beforeAll(async () => {
-  // twice in parallel: the advisory lock must serialize them
   await Promise.all([runMigrations(pool), runMigrations(pool)]);
 });
 

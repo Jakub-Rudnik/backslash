@@ -29,15 +29,12 @@ export function createAuth({ db, secret, baseURL, trustedOrigins, github }: Auth
     },
     socialProviders: github ? { github } : {},
     trustedOrigins: (request) => {
-      // same-origin through a proxy (e.g. the dev server opened via a LAN IP). The scheme comes
-      // from the proxy; a browser can't set it, so it can't be used to forge a cross-site request
       const host = request?.headers.get("host");
       const proto = request?.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? "http";
       return [...trustedOrigins, host ? `${proto}://${host}` : null];
     },
     session: {
       expiresIn: 60 * 60 * 24 * 30,
-      // refresh the expiry at most once a day
       updateAge: 60 * 60 * 24,
     },
     advanced: {

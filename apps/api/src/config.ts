@@ -16,13 +16,11 @@ const list = (v: string) =>
 const Env = z
   .object({
     PORT: z.coerce.number().int().positive().default(3000),
-    // proxies allowed to set X-Forwarded-* (Fastify trustProxy: "loopback", IPs/CIDRs, comma separated)
     TRUST_PROXY: z.string().default("loopback"),
     VALKEY_URL: z.url().default("valkey://127.0.0.1:6379"),
     DATABASE_URL: z.url(),
     /** public URL of the web app (OAuth callbacks, auth cookies) */
     PUBLIC_URL: z.url().default("http://localhost:5173"),
-    // comma separated, extra trusted origins besides same-origin
     WEB_ORIGIN: z.string().default("").transform(list),
     BETTER_AUTH_SECRET: z.string().min(32, "generate one: openssl rand -base64 32"),
     GITHUB_CLIENT_ID: z.string().optional(),
@@ -34,7 +32,6 @@ const Env = z
       .string()
       .default("../../.data/compiles")
       .transform((p) => resolve(p)),
-    // uploaded files, shared with the compiler
     BLOB_DIR: z
       .string()
       .default("../../.data/blobs")

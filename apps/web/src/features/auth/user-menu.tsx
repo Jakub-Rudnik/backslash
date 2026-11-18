@@ -2,7 +2,7 @@ import { Logout01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { useAccount } from "@/lib/account";
+import { useAccount } from "@/features/auth/account";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { authClient } from "@/lib/auth-client";
+import { authClient } from "@/features/auth/auth-client";
 import { identityFor, initials } from "@/lib/user";
 
 export function UserMenu() {
@@ -40,7 +40,6 @@ export function UserMenu() {
         {initials(account.name)}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
-        {/* Base UI: a label must live inside a group */}
         <DropdownMenuGroup>
           <DropdownMenuLabel>
             <div className="truncate font-medium text-foreground">{account.name}</div>

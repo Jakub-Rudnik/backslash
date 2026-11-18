@@ -21,7 +21,6 @@ export async function compileRoutes(
   app: FastifyInstance,
   { db, backend, snapshots, blobDir }: CompileRoutesOptions,
 ) {
-  // viewers may compile too (read-only), they just can't publish the result to the doc
   app.post("/projects/:id/compile", async (req, reply) => {
     const access = await requireProject(db, req, reply, "viewer");
     if (!access) return reply;
@@ -43,7 +42,6 @@ export async function compileRoutes(
     const params = PdfParams.safeParse(req.params);
     if (!params.success) return reply.code(400).send({ error: "Invalid job id" });
     const { jobId } = params.data;
-    // the job must belong to this project, else any member could read any PDF by job id
     if ((await backend.projectOf(jobId)) !== access.projectId) {
       return reply.code(404).send({ error: "PDF not found" });
     }

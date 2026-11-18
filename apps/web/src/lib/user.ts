@@ -1,6 +1,5 @@
 export type CollabUser = { id: string; name: string; color: string; colorLight: string };
 
-// distinct hues, readable on both light and dark backgrounds
 export const USER_COLORS = [
   "#c8df4c",
   "#4cc9df",
@@ -37,7 +36,6 @@ export function resolveColorClash(
   earlier: CollabUser[],
   everyone: CollabUser[],
 ): CollabUser {
-  // our own other tabs keep the same color
   const clash = earlier.some((u) => u.color === me.color && u.id !== me.id);
   if (!clash) return me;
   const taken = new Set(everyone.filter((u) => u.id !== me.id).map((u) => u.color));

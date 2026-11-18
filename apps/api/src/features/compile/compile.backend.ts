@@ -35,7 +35,6 @@ export function queueBackend(
         throw err;
       }
     },
-    // jobs are kept as long as their compile dirs (removeOnComplete), so this also expires PDFs
     async projectOf(jobId) {
       const job = await queue.getJob(jobId);
       return job?.data.projectId ?? null;

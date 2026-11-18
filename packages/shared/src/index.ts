@@ -62,10 +62,8 @@ const CompileResult = z.object({
   errors: z.array(CompileError),
 });
 
-// Collaborative projects: one Yjs doc per project, the room name is the project id
 const ProjectId = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
 
-// Y.Map in the collab doc holding the latest compile, so every collaborator sees it
 const DOC_BUILD_FIELD = "build";
 const SharedBuild = z.object({
   jobId: z.string(),

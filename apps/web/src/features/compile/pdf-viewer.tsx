@@ -9,7 +9,6 @@ import {
 } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-// pdf.js parses PDFs in a Web Worker; Vite serves the worker file under this URL.
 GlobalWorkerOptions.workerSrc = workerUrl;
 
 type PdfViewerProps = {
@@ -26,8 +25,6 @@ export function PdfViewer({ url, className }: PdfViewerProps) {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Load the document whenever the URL changes. The previous PDF stays on screen
-  // until the new one is ready, so recompiling doesn't flicker.
   useEffect(() => {
     if (!url) return;
     let cancelled = false;
@@ -50,7 +47,6 @@ export function PdfViewer({ url, className }: PdfViewerProps) {
     };
   }, [url]);
 
-  // Free the worker-side memory of a document once it's replaced or unmounted.
   useEffect(() => {
     return () => {
       void loaded?.task.destroy();
@@ -88,7 +84,6 @@ function PdfPage({ pdf, pageNumber, width }: PdfPageProps) {
       const canvas = canvasRef.current;
       if (cancelled || !canvas) return;
 
-      // Scale the page to the container width; render extra pixels on HiDPI screens.
       const scale = width / page.getViewport({ scale: 1 }).width;
       const viewport = page.getViewport({ scale });
       const ratio = window.devicePixelRatio || 1;
@@ -108,7 +103,6 @@ function PdfPage({ pdf, pageNumber, width }: PdfPageProps) {
       });
     });
 
-    // A canvas can't run two renders at once, so cancel the old one first.
     return () => {
       cancelled = true;
       task?.cancel();

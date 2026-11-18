@@ -16,7 +16,6 @@ export async function authRoutes(app: FastifyInstance, { auth }: { auth: Auth })
       );
       reply.code(response.status);
       for (const [key, value] of response.headers) {
-        // multiple cookies come as separate set-cookie headers
         if (key === "set-cookie") continue;
         reply.header(key, value);
       }

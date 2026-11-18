@@ -13,7 +13,6 @@ export function useCompile({ onStart, onResult, onSettled }: UseCompileOptions =
   function run(projectId: string) {
     const startedAt = Date.now();
     onStart?.();
-    // per-call callbacks only fire for the latest mutate() call, so stale results are dropped
     mutation.mutate(projectId, {
       onSuccess: (result) => onResult?.(result, startedAt),
       onSettled: () => onSettled?.(),

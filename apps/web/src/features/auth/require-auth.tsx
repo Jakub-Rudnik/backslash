@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
-import { AccountContext } from "@/lib/account";
-import { authClient } from "@/lib/auth-client";
+import { AccountContext } from "@/features/auth/account";
+import { authClient } from "@/features/auth/auth-client";
 
 export function FullPageMessage({ children }: { children: ReactNode }) {
   return (

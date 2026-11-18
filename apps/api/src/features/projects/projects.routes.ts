@@ -63,7 +63,6 @@ export async function projectRoutes(app: FastifyInstance, { db, events }: Projec
       await tx.insert(projects).values({ id, name: body.data.name, ownerId: me.id });
       await tx.insert(projectMembers).values({ projectId: id, userId: me.id, role: "owner" });
     });
-    // the collab server seeds main.tex when the doc is first opened
     return reply.code(201).send({ id });
   });
 
@@ -103,7 +102,6 @@ export async function projectRoutes(app: FastifyInstance, { db, events }: Projec
   app.delete("/projects/:id", async (req, reply) => {
     const access = await requireProject(db, req, reply, "owner");
     if (!access) return reply;
-    // cascades to members, invites, blobs references and the collab document
     await db.delete(projects).where(eq(projects.id, access.projectId));
     await events.accessChanged(access.projectId);
     return reply.code(204).send();
@@ -156,7 +154,6 @@ export async function projectRoutes(app: FastifyInstance, { db, events }: Projec
     return reply.code(204).send();
   });
 
-  // owner removes anyone but themselves; any member can leave
   app.delete("/projects/:id/members/:userId", async (req, reply) => {
     const access = await requireProject(db, req, reply, "viewer");
     if (!access) return reply;
@@ -296,7 +293,6 @@ export async function projectRoutes(app: FastifyInstance, { db, events }: Projec
           .onConflictDoNothing();
         return false;
       }
-      // a link never downgrades anyone
       if (higherRole(existing.role, invite.role) === existing.role) return false;
       await tx
         .update(projectMembers)
@@ -306,7 +302,6 @@ export async function projectRoutes(app: FastifyInstance, { db, events }: Projec
         );
       return true;
     });
-    // open read-only connections must reconnect to get write access
     if (upgraded) await events.accessChanged(invite.projectId);
     return { projectId: invite.projectId };
   });

@@ -1,5 +1,5 @@
 import { createContext, use } from "react";
-import type { Account } from "@/lib/auth-client";
+import type { Account } from "@/features/auth/auth-client";
 
 export const AccountContext = createContext<Account | null>(null);
 

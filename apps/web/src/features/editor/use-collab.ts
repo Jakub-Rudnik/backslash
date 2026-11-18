@@ -41,13 +41,10 @@ export function useCollab(projectId: string, account: { id: string; name: string
   const [status, setStatus] = useState<WebSocketStatus>(WebSocketStatus.Connecting);
   const [synced, setSynced] = useState(false);
   const [denied, setDenied] = useState(false);
-  // what the server granted on the current connection; a role change makes it reconnect
   const [readOnly, setReadOnly] = useState<boolean | null>(null);
   const [me, setMe] = useState<CollabUser>(() => identityFor(account));
   const [peers, setPeers] = useState<Peer[]>([]);
   const { id: accountId, name: accountName } = account;
-  // current presence identity; read by the connection effect without making it a dependency
-  // (a name change must not recreate the doc and drop unsynced edits)
   const identityRef = useRef<CollabUser>(me);
   const currentName = useEffectEvent(() => accountName);
 
@@ -84,7 +81,6 @@ export function useCollab(projectId: string, account: { id: string; name: string
           })),
         );
 
-        // whoever joined earlier keeps their color (clientId breaks ties)
         const earlier = others.filter((s) => {
           const theirs = s.joinedAt ?? 0;
           return theirs < joinedAt || (theirs === joinedAt && s.clientId < doc.clientID);
@@ -103,7 +99,6 @@ export function useCollab(projectId: string, account: { id: string; name: string
     });
     provider.setAwarenessField("joinedAt", joinedAt);
     provider.setAwarenessField("user", identityRef.current);
-    // provider is an external system owned by this effect; expose it once created
     // oxlint-disable-next-line react/set-state-in-effect
     setSession({ doc, provider });
     setMe(identityRef.current);
@@ -119,7 +114,6 @@ export function useCollab(projectId: string, account: { id: string; name: string
     };
   }, [projectId, accountId]);
 
-  // renamed account: update presence only
   useEffect(() => {
     if (!session || identityRef.current.name === accountName) return;
     identityRef.current = { ...identityRef.current, name: accountName };

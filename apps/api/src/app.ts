@@ -4,13 +4,13 @@ import type { ServerConfig } from "@backslash/shared";
 import Fastify, { type FastifyServerOptions } from "fastify";
 import { isTrustedOrigin, toHeaders } from "./lib/access.ts";
 import type { ProjectEvents } from "./lib/events.ts";
-import { authRoutes } from "./modules/auth/auth.routes.ts";
-import { blobRoutes } from "./modules/blobs/blob.routes.ts";
-import type { CompileBackend } from "./modules/compile/compile.backend.ts";
-import { compileRoutes } from "./modules/compile/compile.routes.ts";
-import type { SnapshotSource } from "./modules/compile/snapshots.ts";
-import { healthRoutes } from "./modules/health/health.routes.ts";
-import { projectRoutes } from "./modules/projects/projects.routes.ts";
+import { authRoutes } from "./features/auth/auth.routes.ts";
+import { blobRoutes } from "./features/blobs/blob.routes.ts";
+import type { CompileBackend } from "./features/compile/compile.backend.ts";
+import { compileRoutes } from "./features/compile/compile.routes.ts";
+import type { SnapshotSource } from "./features/compile/snapshots.ts";
+import { healthRoutes } from "./features/health/health.routes.ts";
+import { projectRoutes } from "./features/projects/projects.routes.ts";
 
 export type AppDeps = {
   db: Db;
@@ -36,10 +36,8 @@ export function buildApp(deps: AppDeps) {
   app.decorateRequest("user", null);
 
   app.addHook("onRequest", async (req, reply) => {
-    // Better Auth does its own origin checks and session handling
     if (req.url.startsWith("/api/auth/")) return;
 
-    // CSRF: cookies authenticate, so state-changing requests must come from our own pages
     const origin = req.headers.origin;
     if (!SAFE_METHODS.has(req.method) && origin) {
       const request = { host: req.headers.host, protocol: req.protocol };

@@ -1,7 +1,6 @@
 import * as z from "zod";
 
 const MAX_PATH_LENGTH = 255;
-// no spaces/unicode: LaTeX \input and friends choke on them
 const SEGMENT = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
 /** Relative, normalized project path: "main.tex", "chapters/intro.tex". No "..", no dotfiles. */
@@ -84,7 +83,6 @@ function extension(path: string) {
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
 }
 
-// edited as collaborative text; everything else is uploaded as a blob
 const TEXT_EXTENSIONS = new Set([
   ...["tex", "ltx", "sty", "cls", "clo", "dtx", "ins", "def", "cfg", "fd"],
   ...["bib", "bst", "bbx", "cbx", "lbx", "dbx"],
@@ -104,7 +102,6 @@ function sanitizeSegment(name: string) {
   const clean = name
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    // don't decompose in NFKD
     .replace(/ł/g, "l")
     .replace(/Ł/g, "L")
     .replace(/[^A-Za-z0-9._-]+/g, "-")

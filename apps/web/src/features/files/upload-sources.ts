@@ -4,7 +4,6 @@ import { unzip } from "fflate";
 /** A file to upload; `path` is relative to the target folder and not sanitized yet. */
 export type RawUpload = { path: string; data: Blob };
 
-// OS junk that never belongs in a project
 const IGNORED = /(^|\/)(__MACOSX|\.DS_Store|Thumbs\.db|desktop\.ini)(\/|$)|(^|\/)\./;
 const MAX_ZIP_TOTAL = 100 * 1024 * 1024;
 
@@ -26,7 +25,6 @@ async function readEntry(entry: FileSystemEntry, prefix: string): Promise<RawUpl
   if (!entry.isDirectory) return [];
   const reader = (entry as FileSystemDirectoryEntry).createReader();
   const children: FileSystemEntry[] = [];
-  // readEntries returns batches until an empty one
   for (;;) {
     const batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
       reader.readEntries(resolve, reject),
@@ -40,7 +38,6 @@ async function readEntry(entry: FileSystemEntry, prefix: string): Promise<RawUpl
 
 /** Files and folders from a drop. Must be called synchronously in the drop handler. */
 export function fromDataTransfer(dt: DataTransfer): Promise<RawUpload[]> {
-  // entries are only valid during the event, grab them before awaiting anything
   const entries = [...dt.items]
     .map((item) => item.webkitGetAsEntry?.())
     .filter((e): e is FileSystemEntry => !!e);

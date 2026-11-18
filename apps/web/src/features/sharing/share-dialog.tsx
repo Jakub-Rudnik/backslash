@@ -10,7 +10,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useAccount } from "@/lib/account";
+import { useAccount } from "@/features/auth/account";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -75,7 +75,6 @@ function CopyLink({ url }: { url: string }) {
   }
   return (
     <div className="flex items-center gap-2 rounded-2xl border bg-muted/50 p-1.5 pl-3">
-      {/* long token: wrap instead of widening the dialog */}
       <span className="min-w-0 flex-1 font-mono text-xs break-all select-all">{url}</span>
       <Button size="sm" variant="outline" onClick={() => void copy()}>
         <HugeiconsIcon icon={copied ? Tick02Icon : Copy01Icon} data-icon="inline-start" />

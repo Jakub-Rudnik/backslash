@@ -18,12 +18,10 @@ function resolve(): Theme {
   return readStored() ?? (media.matches ? "dark" : "light");
 }
 
-// keep in sync with the inline script in index.html (prevents a flash on load)
 function apply(theme: Theme) {
   document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
-// one shared store: the header toggle and the editor must agree
 let current: Theme = resolve();
 const listeners = new Set<() => void>();
 
@@ -33,7 +31,6 @@ function set(theme: Theme) {
   for (const l of listeners) l();
 }
 
-// follow the OS setting until the user picks a theme explicitly
 media.addEventListener("change", () => {
   if (!readStored()) set(resolve());
 });
@@ -47,9 +44,7 @@ function toggle() {
   const next = current === "dark" ? "light" : "dark";
   try {
     localStorage.setItem(STORAGE_KEY, next);
-  } catch {
-    // storage unavailable; theme still applies for this session
-  }
+  } catch {}
   set(next);
 }
 

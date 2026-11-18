@@ -6,29 +6,28 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 import { AppHeader } from "@/components/app-header";
-import { CollabStatus } from "@/components/collab-status";
-import { CompileStatus } from "@/components/compile-status";
-import { BlobViewer } from "@/components/blob-viewer";
-import { FileTree } from "@/components/file-tree";
-import { LatexEditor, type Reveal } from "@/components/latex-editor";
-import { PdfViewer } from "@/components/pdf-viewer";
-import { FullPageMessage } from "@/components/require-auth";
-import { useAccount } from "@/lib/account";
-import { ShareDialog } from "@/components/share-dialog";
+import { CollabStatus } from "@/features/editor/collab-status";
+import { CompileStatus } from "@/features/compile/compile-status";
+import { BlobViewer } from "@/features/files/blob-viewer";
+import { FileTree } from "@/features/files/file-tree";
+import { LatexEditor, type Reveal } from "@/features/editor/latex-editor";
+import { PdfViewer } from "@/features/compile/pdf-viewer";
+import { FullPageMessage } from "@/features/auth/require-auth";
+import { useAccount } from "@/features/auth/account";
+import { ShareDialog } from "@/features/sharing/share-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { useActiveFile } from "@/hooks/use-active-file";
-import { useCollab } from "@/hooks/use-collab";
-import { useCompile } from "@/hooks/use-compile";
-import { useProjectFiles } from "@/hooks/use-project-files";
-import { useSharedBuild } from "@/hooks/use-shared-build";
-import { useUpload } from "@/hooks/use-upload";
+import { useActiveFile } from "@/features/editor/use-active-file";
+import { useCollab } from "@/features/editor/use-collab";
+import { useCompile } from "@/features/compile/use-compile";
+import { useProjectFiles } from "@/features/files/use-project-files";
+import { useSharedBuild } from "@/features/compile/use-shared-build";
+import { useUpload } from "@/features/files/use-upload";
 import { useTheme } from "@/hooks/use-theme";
 import { api, ApiError, pdfUrl } from "@/lib/api";
-import { downloadProjectZip } from "@/lib/zip-export";
+import { downloadProjectZip } from "@/features/files/zip-export";
 
-// compile dirs are cleaned up after 1h on the compiler; recompile before the shared PDF expires
 const PDF_MAX_AGE_MS = 50 * 60_000;
 
 /** True once local edits reached the server (it compiles its own copy), false on timeout. */
@@ -95,7 +94,6 @@ function ProjectEditor({
   const account = useAccount();
   const collab = useCollab(projectId, account);
   const { session, status, synced, denied, me, peers, setCompiling, setActiveFile } = collab;
-  // the server's word wins (it changes live when the owner changes our role)
   const readOnly = collab.readOnly ?? role === "viewer";
   const build = useSharedBuild(session);
   const project = useProjectFiles(session);
@@ -126,7 +124,6 @@ function ProjectEditor({
       }),
   });
 
-  // tell collaborators which file we're in
   const activeId = active?.id ?? null;
   useEffect(() => {
     setActiveFile(activeId);
@@ -149,9 +146,7 @@ function ProjectEditor({
 
   async function compile() {
     if (!session || !synced || !mainFile) return;
-    // viewers' local changes are never acknowledged, there's nothing of theirs to wait for
     const ready = readOnly || (await waitForSync(session.provider));
-    // compiling now would miss our latest edits
     setSyncError(
       ready ? null : new Error("Your latest edits haven't reached the server, try again"),
     );
@@ -162,14 +157,11 @@ function ProjectEditor({
     () => !!build.pdf && Date.now() - build.pdf.at < PDF_MAX_AGE_MS,
   );
 
-  // once loaded, compile only if nobody has produced a (still available) PDF yet
   useEffect(() => {
-    // compile() only sets state after an await (async), not synchronously in the effect
     // oxlint-disable-next-line react/set-state-in-effect
     if (synced && !pdfIsFresh()) void compileNow();
   }, [synced]);
 
-  // Ctrl/Cmd+S and Ctrl/Cmd+Enter compile; capture phase so CodeMirror doesn't get them
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (!(e.ctrlKey || e.metaKey)) return;

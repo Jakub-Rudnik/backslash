@@ -11,7 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { AppHeader } from "@/components/app-header";
-import { formField, useAccount } from "@/lib/account";
+import { formField, useAccount } from "@/features/auth/account";
 import {
   AlertDialog,
   AlertDialogAction,

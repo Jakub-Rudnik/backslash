@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
-import { blobPath, BlobTooLargeError, storeBlob } from "../src/modules/blobs/blob.store.ts";
-import { healthRoutes } from "../src/modules/health/health.routes.ts";
+import { blobPath, BlobTooLargeError, storeBlob } from "../src/features/blobs/blob.store.ts";
+import { healthRoutes } from "../src/features/health/health.routes.ts";
 
 let dir: string;
 
@@ -28,7 +28,6 @@ test("health", async () => {
 test("blobs are content-addressed and deduplicated", async () => {
   const first = await storeBlob(dir, Readable.from([Buffer.from("hello")]), 100);
   expect(first).toEqual({
-    // sha256("hello")
     hash: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
     size: 5,
   });
@@ -38,7 +37,6 @@ test("blobs are content-addressed and deduplicated", async () => {
 });
 
 test("too large stream is rejected without destroying the source", async () => {
-  // like a request still being received: never ends
   const source = new PassThrough();
   const stored = storeBlob(dir, source, 15);
   source.write(Buffer.alloc(10));

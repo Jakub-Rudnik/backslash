@@ -21,22 +21,17 @@ function runLatexmk(cwd: string, mainFile: string, timeoutMs: number): Promise<R
         "-interaction=nonstopmode",
         "-halt-on-error",
         "-no-shell-escape",
-        // errors as "file:line: msg", so we know which file they're in
         "-file-line-error",
         `-jobname=${OUTPUT}`,
         mainFile,
       ],
       {
         cwd,
-        // own process group so the timeout also kills pdflatex spawned by latexmk
         detached: true,
         stdio: ["ignore", "pipe", "pipe"],
         env: {
           ...process.env,
-          // don't wrap log lines at 79 chars
           max_print_line: "10000",
-          // block writes outside the job dir. NOTE: reads are NOT restricted
-          // (\input{/etc/passwd} works) - needs a sandbox (docker/bwrap)
           openout_any: "p",
         },
       },
@@ -54,9 +49,7 @@ function runLatexmk(cwd: string, mainFile: string, timeoutMs: number): Promise<R
       timedOut = true;
       try {
         process.kill(-child.pid!, "SIGKILL");
-      } catch {
-        // already exited
-      }
+      } catch {}
     }, timeoutMs);
 
     child.on("error", (err) => {
@@ -94,7 +87,6 @@ async function writeFiles(dir: string, files: CompileJobData["files"]) {
     if ("content" in file) {
       await writeFile(target, file.content);
     } else {
-      // a copy, not a (hard)link: TeX may write into the job dir and must not touch the store
       await copyFile(join(env.BLOB_DIR, file.hash), target).catch((err: NodeJS.ErrnoException) => {
         throw err.code === "ENOENT" ? new MissingBlobError(file.path) : err;
       });

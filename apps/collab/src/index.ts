@@ -20,12 +20,9 @@ const auth = createAuth({
   trustedOrigins: env.WEB_ORIGIN,
 });
 
-// same-origin (page served from the host the WS goes through, e.g. via vite proxy
-// on a LAN IP) or explicitly listed in WEB_ORIGIN
 function isAllowedOrigin(origin: string, headers: Headers) {
   if (env.WEB_ORIGIN.includes(origin)) return true;
   const host = headers.get("host");
-  // scheme from the TLS-terminating proxy, plain http otherwise
   const proto = headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? "http";
   try {
     const url = new URL(origin);
@@ -35,14 +32,11 @@ function isAllowedOrigin(origin: string, headers: Headers) {
   }
 }
 
-// membership is re-checked this often even without notifications (missed pub/sub messages)
 const RECONCILE_INTERVAL_MS = 30_000;
 
 const server = new Server<ConnectionContext>({
   address: env.HOST,
   port: env.PORT,
-  // ws maxPayload; the initial sync sends the whole project (MAX_PROJECT_SIZE UTF-16 chars,
-  // up to 3 bytes each in UTF-8) plus Yjs overhead
   websocketOptions: { maxPayload: 24 * 1024 * 1024 },
   debounce: 2000,
   maxDebounce: 10_000,
@@ -55,7 +49,6 @@ const server = new Server<ConnectionContext>({
     }
   },
 
-  // every connection: session cookie -> project membership; viewers are read-only
   async onAuthenticate({ documentName, requestHeaders, connectionConfig }) {
     const projectId = ProjectId.safeParse(documentName);
     if (!projectId.success) throw new Error("Invalid project");
@@ -80,8 +73,6 @@ const server = new Server<ConnectionContext>({
         }
         const seeded = ensureProject(existing);
         if (!seeded) return existing;
-        // persist the seed/migration immediately: if the server restarted before the first edit,
-        // a re-seeded doc (new clientID) would merge with clients' copy and duplicate the files
         await store.save(documentName, seeded);
         return seeded;
       },
@@ -99,14 +90,11 @@ const internal = internalServer(server.hocuspocus, env.INTERNAL_SECRET, (id) =>
 );
 internal.listen(env.INTERNAL_PORT, env.INTERNAL_HOST);
 
-// access changed (member removed, role changed, project deleted): the API publishes the
-// project id, affected sockets are closed and their clients re-authenticate
 const subscriber = new Valkey(env.VALKEY_URL);
 await subscriber.subscribe(COLLAB_REVOKE_CHANNEL);
 const reconcile = (projectId?: string) =>
   access.reconcile(projectId).catch((err: unknown) => console.error("reconcile failed:", err));
 subscriber.on("message", (_channel, projectId: string) => void reconcile(projectId));
-// pub/sub doesn't replay: after a reconnect, catch up on whatever was missed
 subscriber.on("ready", () => void reconcile());
 const reconcileTimer = setInterval(() => void reconcile(), RECONCILE_INTERVAL_MS);
 
@@ -114,7 +102,6 @@ async function shutdown() {
   clearInterval(reconcileTimer);
   internal.close();
   await subscriber.quit();
-  // destroy() flushes pending stores before closing
   await server.destroy();
   await pool.end();
   process.exit(0);

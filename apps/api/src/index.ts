@@ -4,9 +4,9 @@ import { buildApp } from "./app.ts";
 import { env } from "./config.ts";
 import { valkeyEvents } from "./lib/events.ts";
 import { valkey } from "./lib/valkey.ts";
-import { queueBackend } from "./modules/compile/compile.backend.ts";
-import { compileQueue, compileQueueEvents } from "./modules/compile/compile.queue.ts";
-import { collabSnapshots } from "./modules/compile/snapshots.ts";
+import { queueBackend } from "./features/compile/compile.backend.ts";
+import { compileQueue, compileQueueEvents } from "./features/compile/compile.queue.ts";
+import { collabSnapshots } from "./features/compile/snapshots.ts";
 
 const { db, pool } = createDb(env.DATABASE_URL);
 await runMigrations(pool);
