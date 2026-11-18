@@ -183,6 +183,14 @@ function SecuritySection() {
       <section className="space-y-4">
         <SectionHeader title="Password" description="Use at least 8 characters." />
         {methods.isPending && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {methods.error && (
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-destructive">{methods.error.message}</p>
+            <Button variant="outline" size="sm" onClick={() => void methods.refetch()}>
+              Retry
+            </Button>
+          </div>
+        )}
         {methods.data && !hasPassword && (
           <p className="text-sm text-muted-foreground">
             You sign in with {methods.data.map((id) => PROVIDER_LABELS[id] ?? id).join(", ")}, so
