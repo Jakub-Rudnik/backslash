@@ -6,7 +6,7 @@ import { valkeyEvents } from "./lib/events.ts";
 import { valkey } from "./lib/valkey.ts";
 import { queueBackend } from "./features/compile/compile.backend.ts";
 import { compileQueue, compileQueueEvents } from "./features/compile/compile.queue.ts";
-import { collabSnapshots } from "./features/compile/snapshots.ts";
+import { collabBuilds, collabSnapshots } from "./features/compile/collab.client.ts";
 
 const { db, pool } = createDb(env.DATABASE_URL);
 await runMigrations(pool);
@@ -28,6 +28,7 @@ const app = buildApp({
   events: valkeyEvents(valkey),
   compile: queueBackend(compileQueue, compileQueueEvents, env.COMPILE_DIR),
   snapshots: collabSnapshots(env.COLLAB_INTERNAL_URL, env.INTERNAL_SECRET),
+  publishBuild: collabBuilds(env.COLLAB_INTERNAL_URL, env.INTERNAL_SECRET),
   blobDir: env.BLOB_DIR,
   trustedOrigins: [env.PUBLIC_URL, ...env.WEB_ORIGIN],
   config: { github: github !== undefined },

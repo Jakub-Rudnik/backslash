@@ -9,6 +9,7 @@ import { checkSandbox } from "./sandbox.ts";
 
 await checkSandbox();
 await mkdir(env.COMPILE_DIR, { recursive: true });
+await mkdir(env.CACHE_DIR, { recursive: true });
 
 const worker = new Worker<CompileJobData, CompileResult, "compile">(
   COMPILE_QUEUE,
@@ -26,12 +27,15 @@ worker.on("error", (err) => {
   console.error("worker error:", err);
 });
 
+const CACHE_TTL_MS = 15 * 60_000;
+
 const runCleanup = () =>
-  cleanupOldCompiles(env.COMPILE_DIR, env.COMPILE_TTL_MS).catch((err) =>
-    console.error("cleanup failed:", err),
-  );
+  Promise.all([
+    cleanupOldCompiles(env.COMPILE_DIR, env.COMPILE_TTL_MS),
+    cleanupOldCompiles(env.CACHE_DIR, CACHE_TTL_MS),
+  ]).catch((err) => console.error("cleanup failed:", err));
 await runCleanup();
-const cleanupTimer = setInterval(runCleanup, 10 * 60_000);
+const cleanupTimer = setInterval(runCleanup, 5 * 60_000);
 
 console.log(`compiler worker listening on "${COMPILE_QUEUE}" (concurrency ${env.CONCURRENCY})`);
 

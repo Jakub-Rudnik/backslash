@@ -1,47 +1,25 @@
-import { DOC_BUILD_FIELD, SharedBuild } from "@backslash/shared";
-import { useCallback, useEffect, useState } from "react";
+import { DOC_BUILD_FIELD } from "@backslash/shared";
+import { readBuilds, type DocBuilds } from "@backslash/shared/doc";
+import { useEffect, useState } from "react";
 import type { CollabSession } from "@/features/editor/use-collab";
 
-type BuildState = { latest: SharedBuild | null; pdf: SharedBuild | null };
+const EMPTY: DocBuilds = { latest: null, pdf: null };
 
-const EMPTY: BuildState = { latest: null, pdf: null };
-
-function read(session: CollabSession): BuildState {
-  const map = session.doc.getMap(DOC_BUILD_FIELD);
-  const latest = SharedBuild.safeParse(map.get("latest"));
-  const pdf = SharedBuild.safeParse(map.get("pdf"));
-  return {
-    latest: latest.success ? latest.data : null,
-    pdf: pdf.success ? pdf.data : null,
-  };
-}
-
-/** Latest compile result shared through the Yjs doc: everyone sees the same PDF and errors. */
+/** Latest compile result, written into the doc by the server: everyone sees the same PDF and errors. */
 export function useSharedBuild(session: CollabSession | null) {
-  const [state, setState] = useState<BuildState>(EMPTY);
+  const [state, setState] = useState<DocBuilds>(EMPTY);
 
   useEffect(() => {
     if (!session) return;
     const map = session.doc.getMap(DOC_BUILD_FIELD);
-    const update = () => setState(read(session));
+    const update = () => setState(readBuilds(session.doc));
     update();
     map.observe(update);
-    return () => map.unobserve(update);
+    return () => {
+      map.unobserve(update);
+      setState(EMPTY);
+    };
   }, [session]);
 
-  const publish = useCallback(
-    (build: SharedBuild) => {
-      if (!session) return;
-      const map = session.doc.getMap(DOC_BUILD_FIELD);
-      const current = read(session);
-      if (current.latest && current.latest.at > build.at) return;
-      session.doc.transact(() => {
-        map.set("latest", build);
-        if (build.status === "success") map.set("pdf", build);
-      });
-    },
-    [session],
-  );
-
-  return { ...state, publish };
+  return state;
 }

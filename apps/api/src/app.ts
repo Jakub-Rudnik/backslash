@@ -8,7 +8,7 @@ import { authRoutes } from "./features/auth/auth.routes.ts";
 import { blobRoutes } from "./features/blobs/blob.routes.ts";
 import type { CompileBackend } from "./features/compile/compile.backend.ts";
 import { compileRoutes } from "./features/compile/compile.routes.ts";
-import type { SnapshotSource } from "./features/compile/snapshots.ts";
+import type { BuildPublisher, SnapshotSource } from "./features/compile/collab.client.ts";
 import { healthRoutes } from "./features/health/health.routes.ts";
 import { projectRoutes } from "./features/projects/projects.routes.ts";
 
@@ -18,6 +18,7 @@ export type AppDeps = {
   events: ProjectEvents;
   compile: CompileBackend;
   snapshots: SnapshotSource;
+  publishBuild: BuildPublisher;
   blobDir: string;
   /** origins besides same-origin that may call the API with cookies */
   trustedOrigins: string[];
@@ -59,6 +60,7 @@ export function buildApp(deps: AppDeps) {
         db,
         backend: deps.compile,
         snapshots: deps.snapshots,
+        publish: deps.publishBuild,
         blobDir: deps.blobDir,
       });
     },

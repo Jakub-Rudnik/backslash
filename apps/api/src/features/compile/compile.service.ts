@@ -1,10 +1,10 @@
 import { CompileRequest, type ProjectFile } from "@backslash/shared";
 import { getMainFile, listFiles } from "@backslash/shared/doc";
-import { projectBlobs, type Db } from "@backslash/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { projectBlobs, projects, type Db } from "@backslash/db";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import * as Y from "yjs";
 import { blobExists } from "../blobs/blob.store.ts";
-import type { SnapshotSource } from "./snapshots.ts";
+import type { SnapshotSource } from "./collab.client.ts";
 
 export class CompileInputError extends Error {}
 
@@ -53,4 +53,13 @@ export async function buildCompileRequest(
     throw new CompileInputError(parsed.error.issues.map((i) => i.message).join(", "));
   }
   return parsed.data;
+}
+
+export async function nextCompileSeq(db: Db, projectId: string): Promise<number | null> {
+  const [row] = await db
+    .update(projects)
+    .set({ compileSeq: sql`${projects.compileSeq} + 1` })
+    .where(eq(projects.id, projectId))
+    .returning({ seq: projects.compileSeq });
+  return row?.seq ?? null;
 }

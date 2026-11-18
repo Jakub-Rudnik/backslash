@@ -15,6 +15,10 @@ const Env = z.object({
     .string()
     .default("../../.data/compiles")
     .transform((p) => resolve(p)),
+  CACHE_DIR: z
+    .string()
+    .default("../../.data/compile-cache")
+    .transform((p) => resolve(p)),
   BLOB_DIR: z
     .string()
     .default("../../.data/blobs")

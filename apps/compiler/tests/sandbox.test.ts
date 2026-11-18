@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
+import { saveCache } from "../src/cache.ts";
 import { checkSandbox, runLatexmk } from "../src/sandbox.ts";
 
 const available = await checkSandbox().then(
@@ -15,11 +16,13 @@ describe.skipIf(!available)("compile sandbox", () => {
   let root: string;
   let input: string;
   let output: string;
+  let cache: string;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "backslash-sandbox-test-"));
     input = join(root, "job.input");
     output = join(root, "job");
+    cache = join(root, "cache");
     await mkdir(input);
     await mkdir(output);
     await writeFile(join(root, "secret.tex"), SECRET);
@@ -32,7 +35,7 @@ describe.skipIf(!available)("compile sandbox", () => {
   async function compile(body: string, timeoutMs = 20_000) {
     const source = `\\documentclass{article}\n\\begin{document}\n${body}\n\\end{document}\n`;
     await writeFile(join(input, "main.tex"), source);
-    const run = await runLatexmk(input, output, "main.tex", timeoutMs);
+    const run = await runLatexmk(input, cache, output, "main.tex", timeoutMs);
     const log = await readFile(join(output, "output.log"), "utf8").catch(() => "");
     return { run, log };
   }
@@ -69,5 +72,29 @@ describe.skipIf(!available)("compile sandbox", () => {
     const { run } = await compile("\\loop\\iftrue\\repeat", 1500);
     expect(run.timedOut).toBe(true);
     expect(Date.now() - started).toBeLessThan(5000);
+  });
+
+  test("reuses the project's build cache", async () => {
+    const body = "\\tableofcontents\\section{One}";
+    expect((await compile(body)).run.code).toBe(0);
+    await saveCache(output, cache, new Set(["main.tex"]), "job1");
+    expect(await readdir(cache)).not.toContain("main.tex");
+
+    output = join(root, "job2");
+    await mkdir(output);
+    const { run } = await compile(body);
+    expect(run.code).toBe(0);
+    expect(run.output).toContain("up-to-date");
+    expect(await readdir(output)).toContain("output.pdf");
+  });
+
+  test("the cache never brings back the project's own files", async () => {
+    await writeFile(join(input, "chapter.tex"), "Chapter");
+    expect((await compile("\\input{chapter}")).run.code).toBe(0);
+    await writeFile(join(output, "chapter.tex"), "Changed during the build");
+    await saveCache(output, cache, new Set(["main.tex", "chapter.tex"]), "job1");
+    const cached = await readdir(cache);
+    expect(cached).toContain("output.aux");
+    expect(cached).not.toContain("chapter.tex");
   });
 });

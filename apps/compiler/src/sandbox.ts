@@ -41,10 +41,10 @@ function rootLinkArgs() {
 
 /**
  * A fresh sandbox per run: no network, no host env, only TeX Live and the job's own files.
- * The input dir is mounted read-only at /in, the build runs in a size-limited tmpfs at /work
- * and files it writes are copied to the output dir (mounted at /out) when it ends.
+ * The project's files (/in) and its build cache (/cache) are mounted read-only, the build runs
+ * in a size-limited tmpfs at /work and the files it produced are copied to /out when it ends.
  */
-function bwrapArgs(inputDir: string, outputDir: string) {
+function bwrapArgs(inputDir: string, cacheDir: string, outputDir: string) {
   return [
     "--unshare-all",
     "--die-with-parent",
@@ -79,6 +79,9 @@ function bwrapArgs(inputDir: string, outputDir: string) {
     "--ro-bind",
     inputDir,
     "/in",
+    "--ro-bind-try",
+    cacheDir,
+    "/cache",
     "--bind",
     outputDir,
     "/out",
@@ -88,21 +91,28 @@ function bwrapArgs(inputDir: string, outputDir: string) {
 }
 
 const SCRIPT = `
+if [ -d /cache ]; then cp -R /cache/. /work/ 2>/dev/null; fi
 cp -R /in/. /work/ || exit ${INPUT_TOO_LARGE}
 touch /tmp/.started
 ulimit -u ${MAX_PROCESSES} -v ${MEMORY_LIMIT_KB}
 latexmk -pdf -norc -interaction=nonstopmode -halt-on-error -no-shell-escape -file-line-error \\
   -jobname=${OUTPUT} "./$1"
 code=$?
-find . -type f -newer /tmp/.started -exec cp --parents -- {} /out/ \\;
+find . -type f | while IFS= read -r f; do
+  if [ "$f" -nt /tmp/.started ] || [ ! -e "/in/$f" ]; then cp --parents -- "$f" /out/; fi
+done
 exit $code
 `;
 
 export type LatexmkRun = { code: number | null; timedOut: boolean; output: string };
 
-/** Compiles `mainFile` from `inputDir`; the files the build produced end up in `outputDir`. */
+/**
+ * Compiles `mainFile` from `inputDir`, starting from the build files in `cacheDir` (may be
+ * missing). The files the build produced, or reused from the cache, end up in `outputDir`.
+ */
 export function runLatexmk(
   inputDir: string,
+  cacheDir: string,
   outputDir: string,
   mainFile: string,
   timeoutMs: number,
@@ -110,7 +120,7 @@ export function runLatexmk(
   return new Promise((resolve, reject) => {
     const child = spawn(
       "bwrap",
-      [...bwrapArgs(inputDir, outputDir), "sh", "-c", SCRIPT, "sh", mainFile],
+      [...bwrapArgs(inputDir, cacheDir, outputDir), "sh", "-c", SCRIPT, "sh", mainFile],
       { detached: true, stdio: ["ignore", "pipe", "pipe"] },
     );
 
@@ -144,7 +154,12 @@ export function runLatexmk(
 export async function checkSandbox() {
   const dir = await mkdtemp(join(tmpdir(), "backslash-sandbox-"));
   try {
-    await promisify(execFile)("bwrap", [...bwrapArgs(dir, dir), "sh", "-c", "command -v latexmk"]);
+    await promisify(execFile)("bwrap", [
+      ...bwrapArgs(dir, dir, dir),
+      "sh",
+      "-c",
+      "command -v latexmk",
+    ]);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(

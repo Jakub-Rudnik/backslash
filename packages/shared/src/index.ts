@@ -66,7 +66,8 @@ const ProjectId = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
 
 const DOC_BUILD_FIELD = "build";
 const SharedBuild = z.object({
-  jobId: z.string(),
+  seq: z.number().int().positive(),
+  jobId: z.string().nullable(),
   status: z.enum(["success", "error"]),
   errors: z.array(CompileError),
   by: z.string(),

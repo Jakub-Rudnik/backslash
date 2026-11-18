@@ -42,6 +42,9 @@ type InvitePreview = { projectId: string; projectName: string; role: GrantableRo
 
 type ServerConfig = { github: boolean };
 
+/** the compile that will include the caller's edits; its result appears in the doc */
+type CompileStarted = { seq: number };
+
 export {
   COLLAB_REVOKE_CHANNEL,
   CreateInvite,
@@ -53,6 +56,7 @@ export {
   UpdateProject,
 };
 export type {
+  CompileStarted,
   CreatedInvite,
   InvitePreview,
   ProjectInvite,

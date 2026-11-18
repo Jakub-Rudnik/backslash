@@ -31,6 +31,7 @@ export function queueBackend(
         return { jobId, ...result };
       } catch (err) {
         const state = await job.getState();
+        if (state === "waiting") await job.remove().catch(() => {});
         if (state === "waiting" || state === "active") throw new CompileTimeoutError();
         throw err;
       }

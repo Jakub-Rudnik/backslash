@@ -111,18 +111,10 @@ function ProjectEditor({
   }
   const { theme } = useTheme();
 
-  const { run, isPending, error } = useCompile({
-    onStart: () => setCompiling(true),
-    onSettled: () => setCompiling(false),
-    onResult: (result, startedAt) =>
-      build.publish({
-        jobId: result.jobId,
-        status: result.status,
-        errors: result.errors,
-        by: me.name,
-        at: startedAt,
-      }),
-  });
+  const { run, isPending, error } = useCompile(projectId, build.latest);
+  useEffect(() => {
+    setCompiling(isPending);
+  }, [isPending, setCompiling]);
 
   const activeId = active?.id ?? null;
   useEffect(() => {
@@ -150,7 +142,7 @@ function ProjectEditor({
     setSyncError(
       ready ? null : new Error("Your latest edits haven't reached the server, try again"),
     );
-    if (ready) run(projectId);
+    if (ready) void run();
   }
   const compileNow = useEffectEvent(compile);
   const pdfIsFresh = useEffectEvent(
@@ -262,7 +254,7 @@ function ProjectEditor({
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize="42">
           <PdfViewer
-            url={build.pdf ? pdfUrl(projectId, build.pdf.jobId) : null}
+            url={build.pdf?.jobId ? pdfUrl(projectId, build.pdf.jobId) : null}
             className="h-full overflow-auto bg-muted p-4"
           />
         </ResizablePanel>

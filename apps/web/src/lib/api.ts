@@ -1,6 +1,6 @@
 import {
   UploadedBlob,
-  type CompileResult,
+  type CompileStarted,
   type CreatedInvite,
   type GrantableRole,
   type InvitePreview,
@@ -11,8 +11,6 @@ import {
 } from "@backslash/shared";
 
 const API_BASE = "/api";
-
-export type CompileResponse = CompileResult & { jobId: string };
 
 export class ApiError extends Error {
   readonly status: number;
@@ -74,8 +72,8 @@ export const api = {
   acceptInvite: (token: string) =>
     call<{ projectId: string }>("POST", `/invites/${encodeURIComponent(token)}/accept`),
 
-  /** the server compiles its own copy of the project, nothing is sent */
-  compile: (id: string) => call<CompileResponse>("POST", `${project(id)}/compile`),
+  /** the server compiles its own copy of the project; the result appears in the doc */
+  compile: (id: string) => call<CompileStarted>("POST", `${project(id)}/compile`),
 };
 
 export function pdfUrl(projectId: string, jobId: string) {

@@ -4,12 +4,13 @@
  *   files:   Y.Map<fileId, Y.Map{ path: string, content: Y.Text }>       text file
  *                          Y.Map{ path: string, hash: string, size: number } uploaded blob
  *   project: Y.Map{ mainFileId: string }
+ *   build:   Y.Map{ latest: SharedBuild, pdf: SharedBuild }   written by the server only
  *
  * Files are keyed by a stable id (not path), so renames don't recreate the Y.Text
  * and don't lose concurrent edits.
  */
 import * as Y from "yjs";
-import { BlobHash, MAX_FILES } from "./index.ts";
+import { BlobHash, DOC_BUILD_FIELD, MAX_FILES, SharedBuild } from "./index.ts";
 import { FilePath, findPathConflict, isTexFile, resolvePathConflicts } from "./paths.ts";
 
 const DOC_FILES_FIELD = "files";
@@ -216,6 +217,26 @@ function isFileTreeChange(events: Y.YEvent<Y.AbstractType<unknown>>[]): boolean 
   return events.some((e) => e.target instanceof Y.Map);
 }
 
+type DocBuilds = { latest: SharedBuild | null; pdf: SharedBuild | null };
+
+function readBuilds(doc: Y.Doc): DocBuilds {
+  const map = doc.getMap(DOC_BUILD_FIELD);
+  const latest = SharedBuild.safeParse(map.get("latest"));
+  const pdf = SharedBuild.safeParse(map.get("pdf"));
+  return {
+    latest: latest.success ? latest.data : null,
+    pdf: pdf.success ? pdf.data : null,
+  };
+}
+
+function writeBuild(doc: Y.Doc, build: SharedBuild) {
+  const map = doc.getMap(DOC_BUILD_FIELD);
+  doc.transact(() => {
+    map.set("latest", build);
+    if (build.status === "success") map.set("pdf", build);
+  });
+}
+
 export {
   createBlobFile,
   createFile,
@@ -231,6 +252,7 @@ export {
   listFiles,
   projectMap,
   isInFolder,
+  readBuilds,
   renameFile,
   renameFolder,
   replaceFile,
@@ -239,5 +261,6 @@ export {
   upsertFile,
   validateFolderRename,
   validatePath,
+  writeBuild,
 };
-export type { DocBlobFile, DocFile, DocTextFile, FileContent };
+export type { DocBlobFile, DocBuilds, DocFile, DocTextFile, FileContent };

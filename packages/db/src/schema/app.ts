@@ -30,6 +30,7 @@ export const projects = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    compileSeq: integer("compile_seq").notNull().default(0),
   },
   (t) => [index("projects_owner_id_idx").on(t.ownerId)],
 );

@@ -4,12 +4,13 @@
  */
 import { createDb, runMigrations } from "@backslash/db";
 import { createAuth } from "@backslash/db/auth";
+import type { CompileRequest, SharedBuild } from "@backslash/shared";
 import { createBlobFile, createFile, seedProject } from "@backslash/shared/doc";
 import type { FastifyInstance, InjectOptions } from "fastify";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vite-plus/test";
 import * as Y from "yjs";
 import { buildApp } from "../src/app.ts";
 import type { CompileBackend } from "../src/features/compile/compile.backend.ts";
@@ -20,17 +21,18 @@ const { db, pool } = createDb(DB_URL);
 
 const docs = new Map<string, Y.Doc>();
 const revoked: string[] = [];
-const jobs = new Map<string, string>();
+const jobs = new Map<string, { projectId: string; request: CompileRequest }>();
+const builds: { projectId: string; build: SharedBuild }[] = [];
 let blobDir: string;
 let app: FastifyInstance;
 
 const compile: CompileBackend = {
   async run(projectId, request) {
     const jobId = crypto.randomUUID();
-    jobs.set(jobId, projectId);
-    return { jobId, status: "success", log: JSON.stringify(request), errors: [] };
+    jobs.set(jobId, { projectId, request });
+    return { jobId, status: "success", log: "", errors: [] };
   },
-  projectOf: async (jobId) => jobs.get(jobId) ?? null,
+  projectOf: async (jobId) => jobs.get(jobId)?.projectId ?? null,
   pdfPath: () => join(import.meta.dirname, "access.test.ts"),
 };
 
@@ -43,6 +45,22 @@ async function request(user: User | null, opts: InjectOptions) {
     ...opts,
     headers: { ...opts.headers, ...(user ? { cookie: user.cookie } : {}) },
   });
+}
+
+async function waitForBuild(project: string, seq: number) {
+  return vi.waitFor(() => {
+    const published = builds.find((b) => b.projectId === project && b.build.seq === seq);
+    if (!published) throw new Error(`build ${seq} not published`);
+    return published.build;
+  });
+}
+
+/** Requests a compile and waits for the result the server publishes into the doc. */
+async function compileProject(user: User, project: string) {
+  const res = await request(user, { method: "POST", url: `/api/projects/${project}/compile` });
+  expect(res.statusCode, res.body).toBe(202);
+  const { seq } = res.json<{ seq: number }>();
+  return waitForBuild(project, seq);
 }
 
 async function signUp(name: string): Promise<User> {
@@ -107,6 +125,7 @@ beforeAll(async () => {
       const doc = docs.get(id);
       return doc ? Y.encodeStateAsUpdate(doc) : null;
     },
+    publishBuild: async (projectId, build) => void builds.push({ projectId, build }),
     blobDir,
     trustedOrigins: ["http://localhost:5173"],
     config: { github: false },
@@ -145,9 +164,7 @@ describe("access matrix", () => {
   beforeAll(async () => {
     hash = (await uploadBlob(users.owner, projectId, "img")).json<{ hash: string }>().hash;
     createBlobFile(docs.get(projectId)!, "img.png", hash, 3);
-    jobId = (
-      await request(users.owner, { method: "POST", url: `/api/projects/${projectId}/compile` })
-    ).json<{ jobId: string }>().jobId;
+    jobId = (await compileProject(users.owner, projectId)).jobId!;
   });
 
   const endpoints: [string, keyof typeof RANK, () => InjectOptions][] = [
@@ -248,20 +265,16 @@ describe("cross-project isolation", () => {
       hash: string;
     }>();
     createBlobFile(docs.get(other)!, "stolen.png", hash, 14);
-    const res = await request(users.stranger, {
-      method: "POST",
-      url: `/api/projects/${other}/compile`,
-    });
-    expect(res.statusCode).toBe(400);
-    expect(res.json<{ error: string }>().error).toMatch(/stolen\.png/);
+    const build = await compileProject(users.stranger, other);
+    expect(build.status).toBe("error");
+    expect(build.jobId).toBeNull();
+    expect(build.errors[0]?.message).toMatch(/stolen\.png/);
     docs.get(other)!.getMap("files").clear();
     seedProject(docs.get(other)!, "x");
   });
 
   test("a PDF of project A can't be read through project B", async () => {
-    const { jobId } = (
-      await request(users.owner, { method: "POST", url: `/api/projects/${projectId}/compile` })
-    ).json<{ jobId: string }>();
+    const { jobId } = await compileProject(users.owner, projectId);
     const res = await request(users.stranger, {
       method: "GET",
       url: `/api/projects/${other}/compile/${jobId}/pdf`,
@@ -279,8 +292,11 @@ describe("cross-project isolation", () => {
         mainFile: "main.tex",
       },
     });
-    expect(res.json<{ log: string }>().log).toContain("from server");
-    expect(res.json<{ log: string }>().log).not.toContain("/etc/passwd");
+    const { seq } = res.json<{ seq: number }>();
+    const { jobId } = await waitForBuild(projectId, seq);
+    const files = JSON.stringify(jobs.get(jobId!)!.request.files);
+    expect(files).toContain("from server");
+    expect(files).not.toContain("/etc/passwd");
   });
 });
 

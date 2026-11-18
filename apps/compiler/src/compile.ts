@@ -1,6 +1,7 @@
-import type { CompileJobData, CompileResult } from "@backslash/shared";
+import { ProjectId, type CompileJobData, type CompileResult } from "@backslash/shared";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
+import { saveCache } from "./cache.ts";
 import { env } from "./config.ts";
 import { parseLog } from "./parse-log.ts";
 import { INPUT_TOO_LARGE, OUTPUT, runLatexmk, type LatexmkRun } from "./sandbox.ts";
@@ -40,16 +41,19 @@ async function writeFiles(dir: string, files: CompileJobData["files"]) {
 
 export async function compileJob(
   jobId: string,
-  { files, mainFile }: CompileJobData,
+  { files, mainFile, projectId }: CompileJobData,
 ): Promise<CompileResult> {
   const outputDir = resolve(env.COMPILE_DIR, jobId);
   const inputDir = `${outputDir}.input`;
+  const cacheDir = resolve(env.CACHE_DIR, ProjectId.parse(projectId));
   await mkdir(outputDir, { recursive: true });
   try {
     await mkdir(inputDir, { recursive: true });
     await writeFiles(inputDir, files);
-    const run = await runLatexmk(inputDir, outputDir, mainFile, env.COMPILE_TIMEOUT_MS);
-    return await readResult(outputDir, files, run);
+    const run = await runLatexmk(inputDir, cacheDir, outputDir, mainFile, env.COMPILE_TIMEOUT_MS);
+    const result = await readResult(outputDir, files, run);
+    await updateCache(result, outputDir, cacheDir, files, jobId);
+    return result;
   } catch (err) {
     if (!(err instanceof MissingBlobError)) throw err;
     return {
@@ -59,6 +63,25 @@ export async function compileJob(
     };
   } finally {
     await rm(inputDir, { recursive: true, force: true });
+  }
+}
+
+/** A failed build may have left broken files (.aux), so the next one starts clean. */
+async function updateCache(
+  result: CompileResult,
+  outputDir: string,
+  cacheDir: string,
+  files: CompileJobData["files"],
+  jobId: string,
+) {
+  try {
+    if (result.status === "success") {
+      await saveCache(outputDir, cacheDir, new Set(files.map((f) => f.path)), jobId);
+    } else {
+      await rm(cacheDir, { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.error(`build cache update failed for job ${jobId}:`, err);
   }
 }
 

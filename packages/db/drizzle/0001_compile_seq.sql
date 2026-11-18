@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "compile_seq" integer DEFAULT 0 NOT NULL;
