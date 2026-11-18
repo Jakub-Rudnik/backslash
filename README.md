@@ -8,6 +8,8 @@
 
 ## Development
 
+- Requirements: Node, Docker, TeX Live with `latexmk`, and bubblewrap (`bwrap`, Linux) for the compile sandbox.
+
 - Start Postgres and Valkey:
 
 ```bash
@@ -45,3 +47,7 @@ vp run -r build
 ```bash
 vp run dev
 ```
+
+## Architecture decisions
+
+See [`docs/adr`](docs/adr).

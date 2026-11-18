@@ -5,7 +5,9 @@ import { cleanupOldCompiles } from "./cleanup.ts";
 import { compileJob } from "./compile.ts";
 import { env } from "./config.ts";
 import { valkey } from "./lib/valkey.ts";
+import { checkSandbox } from "./sandbox.ts";
 
+await checkSandbox();
 await mkdir(env.COMPILE_DIR, { recursive: true });
 
 const worker = new Worker<CompileJobData, CompileResult, "compile">(

@@ -1,67 +1,11 @@
 import type { CompileJobData, CompileResult } from "@backslash/shared";
-import { spawn } from "node:child_process";
-import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { env } from "./config.ts";
 import { parseLog } from "./parse-log.ts";
+import { INPUT_TOO_LARGE, OUTPUT, runLatexmk, type LatexmkRun } from "./sandbox.ts";
 
 const MAX_LOG_LENGTH = 200_000;
-/** -jobname: the PDF is output.pdf whatever the main file is called */
-const OUTPUT = "output";
-
-type RunResult = { code: number | null; timedOut: boolean; output: string };
-
-function runLatexmk(cwd: string, mainFile: string, timeoutMs: number): Promise<RunResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      "latexmk",
-      [
-        "-pdf",
-        "-norc",
-        "-interaction=nonstopmode",
-        "-halt-on-error",
-        "-no-shell-escape",
-        "-file-line-error",
-        `-jobname=${OUTPUT}`,
-        mainFile,
-      ],
-      {
-        cwd,
-        detached: true,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          max_print_line: "10000",
-          openout_any: "p",
-        },
-      },
-    );
-
-    let output = "";
-    const append = (chunk: Buffer) => {
-      if (output.length < MAX_LOG_LENGTH) output += chunk.toString();
-    };
-    child.stdout.on("data", append);
-    child.stderr.on("data", append);
-
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        process.kill(-child.pid!, "SIGKILL");
-      } catch {}
-    }, timeoutMs);
-
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({ code, timedOut, output });
-    });
-  });
-}
 
 async function exists(path: string) {
   try {
@@ -98,10 +42,14 @@ export async function compileJob(
   jobId: string,
   { files, mainFile }: CompileJobData,
 ): Promise<CompileResult> {
-  const dir = resolve(env.COMPILE_DIR, jobId);
-  await mkdir(dir, { recursive: true });
+  const outputDir = resolve(env.COMPILE_DIR, jobId);
+  const inputDir = `${outputDir}.input`;
+  await mkdir(outputDir, { recursive: true });
   try {
-    await writeFiles(dir, files);
+    await mkdir(inputDir, { recursive: true });
+    await writeFiles(inputDir, files);
+    const run = await runLatexmk(inputDir, outputDir, mainFile, env.COMPILE_TIMEOUT_MS);
+    return await readResult(outputDir, files, run);
   } catch (err) {
     if (!(err instanceof MissingBlobError)) throw err;
     return {
@@ -109,33 +57,31 @@ export async function compileJob(
       log: "",
       errors: [{ file: err.path, line: null, message: err.message }],
     };
+  } finally {
+    await rm(inputDir, { recursive: true, force: true });
   }
+}
 
-  const run = await runLatexmk(dir, mainFile, env.COMPILE_TIMEOUT_MS);
-
-  const texLog = await readFile(join(dir, `${OUTPUT}.log`), "utf8").catch(() => null);
+async function readResult(
+  outputDir: string,
+  files: CompileJobData["files"],
+  run: LatexmkRun,
+): Promise<CompileResult> {
+  const texLog = await readFile(join(outputDir, `${OUTPUT}.log`), "utf8").catch(() => null);
   const log = (texLog ?? run.output).slice(0, MAX_LOG_LENGTH);
+  const fail = (message: string): CompileResult => ({
+    status: "error",
+    log,
+    errors: [{ file: null, line: null, message }],
+  });
 
-  if (run.timedOut) {
-    return {
-      status: "error",
-      log,
-      errors: [{ file: null, line: null, message: "Compilation timed out" }],
-    };
-  }
+  if (run.timedOut) return fail("Compilation timed out");
+  if (run.code === INPUT_TOO_LARGE) return fail("Project is too large to compile");
 
   const projectFiles = new Set(files.map((f) => f.path));
   const errors = texLog ? parseLog(texLog, projectFiles) : [];
-  const hasPdf = await exists(join(dir, `${OUTPUT}.pdf`));
+  const hasPdf = await exists(join(outputDir, `${OUTPUT}.pdf`));
 
-  if (run.code === 0 && hasPdf) {
-    return { status: "success", log, errors };
-  }
-
-  return {
-    status: "error",
-    log,
-    errors:
-      errors.length > 0 ? errors : [{ file: null, line: null, message: "Compilation failed" }],
-  };
+  if (run.code === 0 && hasPdf) return { status: "success", log, errors };
+  return errors.length > 0 ? { status: "error", log, errors } : fail("Compilation failed");
 }
