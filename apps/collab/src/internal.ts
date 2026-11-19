@@ -17,7 +17,7 @@ const MAX_BODY = 1_000_000;
 async function readJson(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of req as AsyncIterable<Buffer>) {
+  for await (const chunk of req) {
     size += chunk.length;
     if (size > MAX_BODY) throw new Error("body too large");
     chunks.push(chunk);

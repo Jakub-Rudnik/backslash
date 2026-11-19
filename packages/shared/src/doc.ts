@@ -46,12 +46,12 @@ function listFiles(doc: Y.Doc): DocFile[] {
     const path = entry.get("path");
     if (typeof path !== "string" || !FilePath.safeParse(path).success) continue;
     const text = entry.get("content");
-    const hash = entry.get("hash");
+    const hash = BlobHash.safeParse(entry.get("hash"));
     const size = entry.get("size");
     if (text instanceof Y.Text) {
       files.push({ kind: "text", id, path, text });
-    } else if (BlobHash.safeParse(hash).success && typeof size === "number") {
-      files.push({ kind: "blob", id, path, hash: hash as string, size });
+    } else if (hash.success && typeof size === "number") {
+      files.push({ kind: "blob", id, path, hash: hash.data, size });
     }
   }
   return resolvePathConflicts(files);

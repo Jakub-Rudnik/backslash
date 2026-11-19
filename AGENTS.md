@@ -40,6 +40,7 @@ A pre-commit hook runs `vp check --fix` on staged files. Before you finish a cha
 - Keep it simple. Solve the problem at hand without speculative abstractions, extra layers, unused options or generic helpers made for a single use. A few repeated lines are better than the wrong abstraction.
 - Code should explain itself through names and structure.
 - Follow the patterns already used in the app you are changing.
+- No `as` type assertions (`as const` is fine): validate unknown data with Zod or narrow it with `instanceof`. Declare interfaces and `extends` instead of `Pick`/`Omit`. Lint enforces both.
 
 ## Tests
 

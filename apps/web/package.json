@@ -40,7 +40,8 @@
     "tailwindcss": "catalog:",
     "tw-animate-css": "catalog:",
     "y-codemirror.next": "catalog:",
-    "yjs": "catalog:"
+    "yjs": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

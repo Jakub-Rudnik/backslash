@@ -1,4 +1,13 @@
-export type CollabUser = { id: string; name: string; color: string; colorLight: string };
+import * as z from "zod";
+
+export const CollabUser = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.string(),
+  colorLight: z.string(),
+});
+
+export type CollabUser = z.infer<typeof CollabUser>;
 
 export const USER_COLORS = [
   "#c8df4c",

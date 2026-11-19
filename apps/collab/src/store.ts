@@ -1,7 +1,5 @@
-import { collabDocuments, projects, type Db } from "@backslash/db";
+import { collabDocuments, isForeignKeyViolation, projects, type Db } from "@backslash/db";
 import { eq } from "drizzle-orm";
-
-const FOREIGN_KEY_VIOLATION = "23503";
 
 /** Yjs state persistence in Postgres. */
 export function documentStore(db: Db) {
@@ -36,8 +34,7 @@ export function documentStore(db: Db) {
           await tx.update(projects).set({ updatedAt: now }).where(eq(projects.id, projectId));
         });
       } catch (err) {
-        if ((err as { cause?: { code?: string } }).cause?.code === FOREIGN_KEY_VIOLATION) return;
-        if ((err as { code?: string }).code === FOREIGN_KEY_VIOLATION) return;
+        if (isForeignKeyViolation(err)) return;
         throw err;
       }
     },

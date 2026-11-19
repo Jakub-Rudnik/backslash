@@ -16,14 +16,12 @@ export function fromFileList(files: FileList | File[]): RawUpload[] {
 }
 
 async function readEntry(entry: FileSystemEntry, prefix: string): Promise<RawUpload[]> {
-  if (entry.isFile) {
-    const file = await new Promise<File>((resolve, reject) =>
-      (entry as FileSystemFileEntry).file(resolve, reject),
-    );
+  if (entry instanceof FileSystemFileEntry) {
+    const file = await new Promise<File>((resolve, reject) => entry.file(resolve, reject));
     return [{ path: prefix + entry.name, data: file }];
   }
-  if (!entry.isDirectory) return [];
-  const reader = (entry as FileSystemDirectoryEntry).createReader();
+  if (!(entry instanceof FileSystemDirectoryEntry)) return [];
+  const reader = entry.createReader();
   const children: FileSystemEntry[] = [];
   for (;;) {
     const batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
@@ -82,6 +80,6 @@ export async function fromZip(zip: Blob): Promise<RawUpload[]> {
   const paths = stripCommonRoot(names);
   return names.map((name, i) => ({
     path: paths[i]!,
-    data: new Blob([files[name]! as Uint8Array<ArrayBuffer>]),
+    data: new Blob([files[name]!.slice()]),
   }));
 }
