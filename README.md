@@ -8,6 +8,9 @@
 
 Write LaTeX with other people in real time, compile it to PDF on your own server and share projects with other accounts. It runs on one machine with Docker Compose.
 
+> [!NOTE]
+> backslash is in alpha (`0.x`). Things can still change or break between versions, including the database schema and the API. Versions follow [SemVer](https://semver.org) and are tagged as releases on GitHub.
+
 ## Features
 
 - **Real-time collaboration.** Every project is one shared Yjs document. Edits merge without conflicts, and you see who else is in the project and where their cursor is.
