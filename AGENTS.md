@@ -59,6 +59,13 @@ A pre-commit hook runs `vp check --fix` on staged files. Before you finish a cha
 
 After changing UI, run `vp run dev` and check the changed screens in a real browser: use the browser built into your environment, or the Playwright MCP server from `.mcp.json`. Check light and dark theme, a narrow (mobile) width, empty, loading and error states, and that the console has no errors. A passing `vp check` does not mean the UI works.
 
+## Git and versions
+
+- Every feature or fix goes on its own branch off `main` (`feat/<name>`, `fix/<name>`, `chore/<name>`) and is merged through a pull request. Do not commit features straight to `main`.
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org): `type(scope): summary`, e.g. `feat(web): ...`, `fix(api): ...`. Types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`, `ci`. Mark breaking changes with `!` (`feat(api)!: ...`).
+- The project has one version, in the root `package.json`, following [SemVer](https://semver.org). The apps and packages have none. While in alpha (`0.x`), a branch with a `feat` or a breaking change bumps the minor version (`0.1.0` → `0.2.0`), and a branch with only fixes bumps the patch version (`0.1.0` → `0.1.1`). Other changes (`docs`, `chore`, `refactor` and so on) do not bump it.
+- No git tags or GitHub releases for now.
+
 ## Formatting
 
 Formatting is defined in the `fmt` block of the root `vite.config.ts`: 2-space indent, no tabs, double quotes, semicolons, trailing commas, LF, 100 columns. Do not add other formatter configs, and run `vp check --fix` instead of formatting by hand.
