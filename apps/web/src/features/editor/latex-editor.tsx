@@ -1,11 +1,12 @@
 import { useEffect, useRef } from "react";
 import {
+  acceptCompletion,
   autocompletion,
   closeBrackets,
   closeBracketsKeymap,
   completionKeymap,
 } from "@codemirror/autocomplete";
-import { defaultKeymap } from "@codemirror/commands";
+import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import {
   bracketMatching,
   defaultHighlightStyle,
@@ -16,7 +17,7 @@ import {
 } from "@codemirror/language";
 import { lintKeymap } from "@codemirror/lint";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
-import { Compartment, EditorState } from "@codemirror/state";
+import { Compartment, EditorState, Prec } from "@codemirror/state";
 import { oneDarkHighlightStyle } from "@codemirror/theme-one-dark";
 import {
   crosshairCursor,
@@ -98,6 +99,7 @@ const setup = [
   bracketMatching(),
   closeBrackets(),
   autocompletion(),
+  Prec.highest(keymap.of([{ key: "Tab", run: acceptCompletion }])),
   rectangularSelection(),
   crosshairCursor(),
   highlightActiveLine(),
@@ -110,6 +112,7 @@ const setup = [
     ...foldKeymap,
     ...completionKeymap,
     ...lintKeymap,
+    indentWithTab,
   ]),
 ];
 
