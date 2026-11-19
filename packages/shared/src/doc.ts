@@ -3,11 +3,13 @@
  *
  *   files:   Y.Map<fileId, Y.Map{ path: string, content: Y.Text }>       text file
  *                          Y.Map{ path: string, hash: string, size: number } uploaded blob
+ *   folders: Y.Map<path, true>   folders created explicitly, kept when empty
  *   project: Y.Map{ mainFileId: string }
  *   build:   Y.Map{ latest: SharedBuild, pdf: SharedBuild }   written by the server only
  *
  * Files are keyed by a stable id (not path), so renames don't recreate the Y.Text
- * and don't lose concurrent edits.
+ * and don't lose concurrent edits. Folders are implied by file paths; the folders map only
+ * adds the ones that would otherwise disappear (new or emptied).
  */
 import * as Y from "yjs";
 import { BlobHash, DOC_BUILD_FIELD, MAX_FILES, SharedBuild } from "./index.ts";
@@ -15,6 +17,7 @@ import { FilePath, findPathConflict, isTexFile, resolvePathConflicts } from "./p
 
 const DOC_FILES_FIELD = "files";
 const DOC_PROJECT_FIELD = "project";
+const DOC_FOLDERS_FIELD = "folders";
 /** single-file docs from before projects had files */
 const LEGACY_TEXT_FIELD = "source";
 const DEFAULT_MAIN_FILE = "main.tex";
@@ -25,6 +28,10 @@ type DocFile = DocTextFile | DocBlobFile;
 
 function filesMap(doc: Y.Doc) {
   return doc.getMap<Y.Map<unknown>>(DOC_FILES_FIELD);
+}
+
+function foldersMap(doc: Y.Doc) {
+  return doc.getMap<unknown>(DOC_FOLDERS_FIELD);
 }
 
 function projectMap(doc: Y.Doc) {
@@ -57,6 +64,24 @@ function listFiles(doc: Y.Doc): DocFile[] {
   return resolvePathConflicts(files);
 }
 
+/** Explicit folders; one clashing with a file (same path or under a file) is hidden, the file wins. */
+function listFolders(doc: Y.Doc, files: DocFile[] = listFiles(doc)): string[] {
+  const paths = files.map((f) => f.path);
+  return [...foldersMap(doc).keys()]
+    .filter((p) => FilePath.safeParse(p).success && findPathConflict(paths, [p]) === null)
+    .toSorted();
+}
+
+function parentDir(path: string) {
+  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+}
+
+/** Records the folder `path` is in, so moving or deleting its last entry doesn't remove it. */
+function keepParentFolder(doc: Y.Doc, path: string) {
+  const dir = parentDir(path);
+  if (dir && !foldersMap(doc).has(dir)) foldersMap(doc).set(dir, true);
+}
+
 /** The chosen main file, falling back to main.tex or the first .tex file. */
 function getMainFile(doc: Y.Doc, files: DocFile[] = listFiles(doc)): DocTextFile | null {
   const tex = files.filter((f): f is DocTextFile => f.kind === "text" && isTexFile(f.path));
@@ -69,18 +94,37 @@ function getMainFile(doc: Y.Doc, files: DocFile[] = listFiles(doc)): DocTextFile
   );
 }
 
+const INVALID_PATH = "Use letters, digits, '.', '_', '-' and '/' only";
+const PATH_TAKEN = "A file or folder with this name exists";
+
 /** Error message if `path` can't be used (invalid or taken), else null. */
 function validatePath(doc: Y.Doc, path: string, ignoreId?: string): string | null {
-  if (!FilePath.safeParse(path).success) {
-    return "Use letters, digits, '.', '_', '-' and '/' only";
-  }
+  if (!FilePath.safeParse(path).success) return INVALID_PATH;
   const files = listFiles(doc);
   if (ignoreId === undefined && files.length >= MAX_FILES) {
     return `A project can have at most ${MAX_FILES} files`;
   }
   const others = files.filter((f) => f.id !== ignoreId).map((f) => f.path);
-  if (findPathConflict([...others, path]) !== null) return "A file or folder with this name exists";
+  if (findPathConflict([...others, path], listFolders(doc, files)) !== null) return PATH_TAKEN;
   return null;
+}
+
+/** Error message if a folder can't be created at `path`, else null. */
+function validateFolderPath(doc: Y.Doc, path: string): string | null {
+  if (!FilePath.safeParse(path).success) return INVALID_PATH;
+  const files = listFiles(doc);
+  const folders = listFolders(doc, files);
+  if (folders.length >= MAX_FILES) return `A project can have at most ${MAX_FILES} folders`;
+  const paths = files.map((f) => f.path);
+  const exists = folders.includes(path) || paths.some((p) => isInFolder(p, path));
+  if (exists || findPathConflict(paths, [...folders, path]) !== null) return PATH_TAKEN;
+  return null;
+}
+
+function createFolder(doc: Y.Doc, path: string) {
+  const error = validateFolderPath(doc, path);
+  if (error) throw new Error(error);
+  foldersMap(doc).set(path, true);
 }
 
 function assertPath(doc: Y.Doc, path: string, ignoreId?: string) {
@@ -146,46 +190,67 @@ function upsertFile(doc: Y.Doc, path: string, content: FileContent): string {
 
 function renameFile(doc: Y.Doc, id: string, path: string) {
   assertPath(doc, path, id);
-  filesMap(doc).get(id)?.set("path", path);
+  const entry = filesMap(doc).get(id);
+  const old = entry?.get("path");
+  doc.transact(() => {
+    if (typeof old === "string" && parentDir(old) !== parentDir(path)) keepParentFolder(doc, old);
+    entry?.set("path", path);
+  });
 }
 
 function deleteFile(doc: Y.Doc, id: string) {
-  filesMap(doc).delete(id);
+  const path = filesMap(doc).get(id)?.get("path");
+  doc.transact(() => {
+    if (typeof path === "string") keepParentFolder(doc, path);
+    filesMap(doc).delete(id);
+  });
 }
 
 function isInFolder(path: string, dir: string) {
   return path.startsWith(`${dir}/`);
 }
 
-/** Error message if folder `from` can't be renamed to `to`, else null. */
+const isFolderOrInside = (path: string, dir: string) => path === dir || isInFolder(path, dir);
+
+/** Error message if folder `from` can't be renamed to `to`, else null. Merges into an existing `to`. */
 function validateFolderRename(doc: Y.Doc, from: string, to: string): string | null {
-  if (!FilePath.safeParse(to).success) return "Use letters, digits, '.', '_', '-' and '/' only";
+  if (!FilePath.safeParse(to).success) return INVALID_PATH;
   if (isInFolder(to, from)) return "Can't move a folder into itself";
-  const files = listFiles(doc);
-  const moved = files.filter((f) => isInFolder(f.path, from));
-  const others = files.filter((f) => !isInFolder(f.path, from)).map((f) => f.path);
-  const next = moved.map((f) => to + f.path.slice(from.length));
-  if (findPathConflict([...others, ...next]) !== null) {
-    return "A file or folder with this name exists";
-  }
+  const move = (p: string) => to + p.slice(from.length);
+  const files = listFiles(doc).map((f) => f.path);
+  const folders = listFolders(doc);
+  const nextFiles = files.map((p) => (isInFolder(p, from) ? move(p) : p));
+  const nextFolders = folders.map((p) => (isFolderOrInside(p, from) ? move(p) : p));
+  if (findPathConflict(nextFiles, [...nextFolders, to]) !== null) return PATH_TAKEN;
   return null;
 }
 
 function renameFolder(doc: Y.Doc, from: string, to: string) {
   const error = validateFolderRename(doc, from, to);
   if (error) throw new Error(error);
+  const move = (p: string) => to + p.slice(from.length);
   const files = filesMap(doc);
+  const folders = foldersMap(doc);
   doc.transact(() => {
+    if (parentDir(from) !== parentDir(to)) keepParentFolder(doc, from);
     for (const f of listFiles(doc)) {
-      if (isInFolder(f.path, from)) files.get(f.id)?.set("path", to + f.path.slice(from.length));
+      if (isInFolder(f.path, from)) files.get(f.id)?.set("path", move(f.path));
+    }
+    for (const p of [...folders.keys()]) {
+      if (!isFolderOrInside(p, from)) continue;
+      folders.delete(p);
+      folders.set(move(p), true);
     }
   });
 }
 
 function deleteFolder(doc: Y.Doc, dir: string) {
   const files = filesMap(doc);
+  const folders = foldersMap(doc);
   doc.transact(() => {
+    keepParentFolder(doc, dir);
     for (const f of listFiles(doc)) if (isInFolder(f.path, dir)) files.delete(f.id);
+    for (const p of [...folders.keys()]) if (isFolderOrInside(p, dir)) folders.delete(p);
   });
 }
 
@@ -240,16 +305,20 @@ function writeBuild(doc: Y.Doc, build: SharedBuild) {
 export {
   createBlobFile,
   createFile,
+  createFolder,
   DEFAULT_MAIN_FILE,
   deleteFile,
   deleteFolder,
   DOC_FILES_FIELD,
   DOC_PROJECT_FIELD,
   filesMap,
+  foldersMap,
   getMainFile,
   isFileTreeChange,
   LEGACY_TEXT_FIELD,
   listFiles,
+  listFolders,
+  parentDir,
   projectMap,
   isInFolder,
   readBuilds,
@@ -259,6 +328,7 @@ export {
   seedProject,
   setMainFile,
   upsertFile,
+  validateFolderPath,
   validateFolderRename,
   validatePath,
   writeBuild,

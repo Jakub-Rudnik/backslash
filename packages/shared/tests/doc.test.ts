@@ -3,17 +3,20 @@ import * as Y from "yjs";
 import {
   createBlobFile,
   createFile,
+  createFolder,
   deleteFile,
   deleteFolder,
   getMainFile,
   LEGACY_TEXT_FIELD,
   listFiles,
+  listFolders,
   renameFile,
   renameFolder,
   replaceFile,
   seedProject,
   setMainFile,
   upsertFile,
+  validateFolderPath,
   validatePath,
   type DocFile,
 } from "../src/doc.ts";
@@ -180,4 +183,40 @@ test("concurrent text replaces don't merge", () => {
   const result = content(listFiles(a)[0]);
   expect(result).toBe(content(listFiles(b)[0]));
   expect(["from a", "from b"]).toContain(result);
+});
+
+test("explicit folders: created empty, kept when emptied, moved and deleted with their tree", () => {
+  const doc = new Y.Doc();
+  createFolder(doc, "figures");
+  expect(listFolders(doc)).toEqual(["figures"]);
+  expect(validateFolderPath(doc, "figures")).not.toBeNull();
+  expect(validatePath(doc, "figures")).not.toBeNull();
+  expect(validatePath(doc, "figures/a.png")).toBeNull();
+
+  const id = createFile(doc, "ch/intro.tex");
+  expect(validateFolderPath(doc, "ch")).not.toBeNull();
+  expect(validateFolderPath(doc, "ch/intro.tex")).not.toBeNull();
+  renameFile(doc, id, "figures/intro.tex");
+  expect(listFolders(doc)).toEqual(["ch", "figures"]);
+
+  createFolder(doc, "ch/empty");
+  renameFolder(doc, "ch", "figures/ch");
+  expect(listFolders(doc)).toEqual(["figures", "figures/ch", "figures/ch/empty"]);
+  expect(() => renameFolder(doc, "figures/ch", "figures/intro.tex")).toThrow();
+
+  deleteFile(doc, id);
+  deleteFolder(doc, "figures/ch");
+  expect(listFolders(doc)).toEqual(["figures"]);
+  expect(listFiles(doc)).toEqual([]);
+});
+
+test("concurrent folder and file with the same path: the file wins", () => {
+  const a = new Y.Doc();
+  const b = new Y.Doc();
+  createFolder(a, "notes");
+  createFolder(a, "keep");
+  createFile(b, "notes", "x");
+  Y.applyUpdate(a, Y.encodeStateAsUpdate(b));
+  expect(listFolders(a)).toEqual(["keep"]);
+  expect(listFiles(a).map((f) => f.path)).toEqual(["notes"]);
 });
