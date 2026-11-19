@@ -48,7 +48,13 @@ async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<v
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** Turns dropped/picked files into validated items; problems go into `failed`. */
-async function prepare(raw: RawUpload[], dir: string, existing: Set<string>, failed: string[]) {
+async function prepare(
+  raw: RawUpload[],
+  dir: string,
+  existing: Set<string>,
+  folders: string[],
+  failed: string[],
+) {
   const expanded: RawUpload[] = [];
   for (const r of raw) {
     if (extension(r.path) !== "zip") {
@@ -74,7 +80,7 @@ async function prepare(raw: RawUpload[], dir: string, existing: Set<string>, fai
     if (!existing.has(item.path)) {
       const error = !FilePath.safeParse(item.path).success
         ? "invalid name"
-        : findPathConflict([...taken, item.path])
+        : findPathConflict([...taken, item.path], folders)
           ? "a file or folder with this name exists"
           : taken.length >= MAX_FILES
             ? `a project can have at most ${MAX_FILES} files`
@@ -148,7 +154,7 @@ export function useUpload(
     const failed: string[] = [];
     try {
       const existing = new Set(project.current().map((f) => f.path));
-      const items = await prepare(raw, dir, existing, failed);
+      const items = await prepare(raw, dir, existing, project.currentFolders(), failed);
       report(...failed);
       const replacing = items.filter((i) => existing.has(i.path)).map((i) => i.path);
       if (replacing.length > 0) {
