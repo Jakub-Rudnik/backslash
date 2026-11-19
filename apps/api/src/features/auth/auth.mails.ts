@@ -1,4 +1,4 @@
-import type { Mail } from "../../lib/mailer.ts";
+import type { MailContent } from "../../lib/mailer.ts";
 
 const escapeHtml = (s: string) =>
   s.replace(
@@ -8,7 +8,7 @@ const escapeHtml = (s: string) =>
 
 const font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-export function resetPasswordMail(name: string, url: string): Omit<Mail, "to"> {
+export function resetPasswordMail(name: string, url: string): MailContent {
   const safeName = escapeHtml(name);
   const safeUrl = escapeHtml(url);
   return {

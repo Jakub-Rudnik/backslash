@@ -36,7 +36,7 @@ function newId(bytes = 12) {
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 function badRequest(reply: FastifyReply, error: z.ZodError) {
-  return reply.code(400).send({ error: z.flattenError(error) });
+  return reply.code(400).send({ error: error.issues.map((i) => i.message).join(", ") });
 }
 
 export async function projectRoutes(
@@ -248,10 +248,14 @@ export async function projectRoutes(
     } satisfies CreatedInvite);
   });
 
+  const InviteParams = z.object({ inviteId: z.string().min(1) });
+
   app.delete("/projects/:id/invites/:inviteId", async (req, reply) => {
     const access = await requireProject(db, req, reply, "owner");
     if (!access) return reply;
-    const { inviteId } = req.params as { inviteId: string };
+    const params = InviteParams.safeParse(req.params);
+    if (!params.success) return badRequest(reply, params.error);
+    const { inviteId } = params.data;
     await db
       .delete(projectInvites)
       .where(and(eq(projectInvites.id, inviteId), eq(projectInvites.projectId, access.projectId)));

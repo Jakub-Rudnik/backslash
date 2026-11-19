@@ -2,6 +2,7 @@ import { ProjectId } from "@backslash/shared";
 import { getProjectRole, hasRole, type Db, type ProjectRole } from "@backslash/db";
 import type { SessionUser } from "@backslash/db/auth";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import * as z from "zod";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -17,6 +18,8 @@ export function requireUser(req: FastifyRequest, reply: FastifyReply): SessionUs
   return null;
 }
 
+const ProjectParams = z.object({ id: ProjectId });
+
 export type ProjectAccess = { user: SessionUser; projectId: string; role: ProjectRole };
 
 /**
@@ -31,9 +34,8 @@ export async function requireProject(
 ): Promise<ProjectAccess | null> {
   const user = requireUser(req, reply);
   if (!user) return null;
-  const id = (req.params as { id?: unknown }).id;
-  const parsed = ProjectId.safeParse(id);
-  const role = parsed.success ? await getProjectRole(db, parsed.data, user.id) : null;
+  const parsed = ProjectParams.safeParse(req.params);
+  const role = parsed.success ? await getProjectRole(db, parsed.data.id, user.id) : null;
   if (!parsed.success || role === null) {
     void reply.code(404).send({ error: "Project not found" });
     return null;
@@ -42,7 +44,7 @@ export async function requireProject(
     void reply.code(403).send({ error: `Requires ${min} access` });
     return null;
   }
-  return { user, projectId: parsed.data, role };
+  return { user, projectId: parsed.data.id, role };
 }
 
 export function toHeaders(raw: FastifyRequest["headers"]): Headers {

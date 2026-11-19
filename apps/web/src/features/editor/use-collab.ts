@@ -1,7 +1,8 @@
 import { HocuspocusProvider, WebSocketStatus } from "@hocuspocus/provider";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import * as Y from "yjs";
-import { identityFor, resolveColorClash, type CollabUser } from "@/lib/user";
+import * as z from "zod";
+import { CollabUser, identityFor, resolveColorClash } from "@/lib/user";
 
 const COLLAB_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/collab`;
 
@@ -18,19 +19,14 @@ export type Peer = {
   fileId: string | null;
 };
 
-type AwarenessState = {
-  clientId: number;
-  user?: CollabUser;
-  joinedAt?: number;
-  compiling?: boolean;
-  fileId?: unknown;
-};
-
-function isCollabUser(u: unknown): u is CollabUser {
-  if (!u || typeof u !== "object") return false;
-  const { id, name, color } = u as Record<string, unknown>;
-  return typeof id === "string" && typeof name === "string" && typeof color === "string";
-}
+/** Other clients may publish anything; states without a valid user are ignored. */
+const PeerState = z.object({
+  clientId: z.number(),
+  user: CollabUser,
+  joinedAt: z.number().catch(0),
+  compiling: z.boolean().catch(false),
+  fileId: z.string().nullable().catch(null),
+});
 
 /**
  * Connects to the project's collab doc. The server checks the session cookie and membership;
@@ -69,23 +65,15 @@ export function useCollab(projectId: string, account: { id: string; name: string
         setSynced(false);
       },
       onAwarenessChange: ({ states }) => {
-        const others = (states as AwarenessState[]).filter(
-          (s): s is AwarenessState & { user: CollabUser } =>
-            s.clientId !== doc.clientID && isCollabUser(s.user),
-        );
-        setPeers(
-          others.map((s) => ({
-            clientId: s.clientId,
-            user: s.user,
-            compiling: !!s.compiling,
-            fileId: typeof s.fileId === "string" ? s.fileId : null,
-          })),
-        );
-
-        const earlier = others.filter((s) => {
-          const theirs = s.joinedAt ?? 0;
-          return theirs < joinedAt || (theirs === joinedAt && s.clientId < doc.clientID);
+        const others = states.flatMap((s) => {
+          const peer = PeerState.safeParse(s);
+          return peer.success && peer.data.clientId !== doc.clientID ? [peer.data] : [];
         });
+        setPeers(others);
+
+        const earlier = others.filter(
+          (s) => s.joinedAt < joinedAt || (s.joinedAt === joinedAt && s.clientId < doc.clientID),
+        );
         const next = resolveColorClash(
           identityRef.current,
           earlier.map((s) => s.user),

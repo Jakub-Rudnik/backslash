@@ -1,6 +1,7 @@
 import type { RateLimitStore, RateRule } from "@backslash/db/auth";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Valkey } from "iovalkey";
+import * as z from "zod";
 
 export const RATE_LIMITS = {
   api: { window: 60, max: 600 },
@@ -18,14 +19,14 @@ local count = redis.call("INCR", KEYS[1])
 if count == 1 then redis.call("EXPIRE", KEYS[1], ARGV[1]) end
 return { count, redis.call("TTL", KEYS[1]) }
 `;
+const ConsumeResult = z.tuple([z.number(), z.number()]);
 
 export function valkeyRateLimits(valkey: Valkey): RateLimitStore {
   return {
     async consume(key, rule) {
-      const [count, ttl] = (await valkey.eval(CONSUME, 1, `ratelimit:${key}`, rule.window)) as [
-        number,
-        number,
-      ];
+      const [count, ttl] = ConsumeResult.parse(
+        await valkey.eval(CONSUME, 1, `ratelimit:${key}`, rule.window),
+      );
       return count <= rule.max
         ? { allowed: true, retryAfter: null }
         : { allowed: false, retryAfter: Math.max(ttl, 1) };

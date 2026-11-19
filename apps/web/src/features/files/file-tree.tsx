@@ -218,7 +218,7 @@ export function FileTree({
     e.preventDefault();
     if (readOnly) return;
     setDragging(false);
-    const target = (e.target as HTMLElement).closest<HTMLElement>("[data-dir]");
+    const target = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-dir]") : null;
     const dir = target?.dataset.dir ?? "";
     fromDataTransfer(e.dataTransfer)
       .then((raw) => upload.start(raw, dir))
@@ -497,7 +497,9 @@ export function FileTree({
           setDragging(true);
         }}
         onDragLeave={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+          const inside =
+            e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget);
+          if (!inside) setDragging(false);
         }}
         onDrop={onDrop}
       >

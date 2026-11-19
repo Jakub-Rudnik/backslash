@@ -1,6 +1,6 @@
 import { BlobHash } from "@backslash/shared";
 import { filesMap } from "@backslash/shared/doc";
-import { collabDocuments, projectBlobs, type Db } from "@backslash/db";
+import { collabDocuments, projectBlobs, type Db, type Executor } from "@backslash/db";
 import { and, eq, lt, notInArray, sql } from "drizzle-orm";
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -11,11 +11,11 @@ import { blobPath } from "./blob.store.ts";
  * Serializes registering, rejecting and collecting a file: whoever holds it sees whether the file
  * exists and which projects use it, and nobody else changes that until the transaction ends.
  */
-export async function lockBlob(tx: Pick<Db, "execute">, hash: string) {
+export async function lockBlob(tx: Executor, hash: string) {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${hash}, 0))`);
 }
 
-export async function isReferenced(db: Pick<Db, "select">, hash: string) {
+export async function isReferenced(db: Executor, hash: string) {
   const [row] = await db
     .select({ hash: projectBlobs.hash })
     .from(projectBlobs)
@@ -74,13 +74,10 @@ async function modifiedBefore(path: string, cutoff: Date) {
 
 /** Deletes files older than `cutoff` that no project uses, and leftovers of failed uploads. */
 async function deleteUnusedFiles(db: Db, dir: string, cutoff: Date) {
-  let names: string[];
-  try {
-    names = await readdir(dir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return 0;
+  const names = await readdir(dir).catch((err: NodeJS.ErrnoException) => {
+    if (err.code === "ENOENT") return [];
     throw err;
-  }
+  });
   let deleted = 0;
   for (const name of names) {
     if (name.startsWith(".tmp-")) {

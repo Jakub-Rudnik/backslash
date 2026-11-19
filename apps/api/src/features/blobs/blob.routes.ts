@@ -1,11 +1,12 @@
 import { BlobHash, MAX_BLOB_SIZE, type UploadedBlob } from "@backslash/shared";
-import { projectBlobs, projects, type Db } from "@backslash/db";
+import { projectBlobs, projects, type Db, type Executor } from "@backslash/db";
 import type { RateLimitStore } from "@backslash/db/auth";
 import { and, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
 import { rm } from "node:fs/promises";
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
+import * as z from "zod";
 import { requireProject } from "../../lib/access.ts";
 import { rateLimit } from "../../lib/rate-limit.ts";
 import { storageUsedBy } from "../../lib/usage.ts";
@@ -22,7 +23,9 @@ export type BlobRoutesOptions = {
 
 const MB = 1024 * 1024;
 
-async function ownerHasBlob(db: Pick<Db, "select">, ownerId: string, hash: string) {
+const BlobParams = z.object({ hash: BlobHash });
+
+async function ownerHasBlob(db: Executor, ownerId: string, hash: string) {
   const [row] = await db
     .select({ hash: projectBlobs.hash })
     .from(projectBlobs)
@@ -88,7 +91,8 @@ export async function blobRoutes(
   app.post("/projects/:id/blobs", async (req, reply) => {
     const access = await requireProject(db, req, reply, "editor");
     if (!access) return reply;
-    if (req.headers["content-type"] !== "application/octet-stream") {
+    const body = req.body;
+    if (req.headers["content-type"] !== "application/octet-stream" || !(body instanceof Readable)) {
       return reply.code(415).send({ error: "Expected application/octet-stream" });
     }
     if (!(await rateLimit(limits, req, reply, "upload"))) return reply;
@@ -98,7 +102,7 @@ export async function blobRoutes(
     }
     let blob: UploadedBlob;
     try {
-      blob = await storeBlob(dir, req.body as Readable, MAX_BLOB_SIZE);
+      blob = await storeBlob(dir, body, MAX_BLOB_SIZE);
     } catch (err) {
       if (err instanceof BlobTooLargeError) {
         return reply.code(413).header("Connection", "close").send({ error: "File too large" });
@@ -120,13 +124,14 @@ export async function blobRoutes(
   app.get("/projects/:id/blobs/:hash", async (req, reply) => {
     const access = await requireProject(db, req, reply, "viewer");
     if (!access) return reply;
-    const hash = BlobHash.safeParse((req.params as { hash?: unknown }).hash);
-    if (!hash.success) return reply.code(400).send({ error: "Invalid hash" });
+    const params = BlobParams.safeParse(req.params);
+    if (!params.success) return reply.code(400).send({ error: "Invalid hash" });
+    const { hash } = params.data;
     const [registered] = await db
       .select({ hash: projectBlobs.hash })
       .from(projectBlobs)
-      .where(and(eq(projectBlobs.projectId, access.projectId), eq(projectBlobs.hash, hash.data)));
-    if (!registered || !(await blobExists(dir, hash.data))) {
+      .where(and(eq(projectBlobs.projectId, access.projectId), eq(projectBlobs.hash, hash)));
+    if (!registered || !(await blobExists(dir, hash))) {
       return reply.code(404).send({ error: "Not found" });
     }
 
@@ -136,6 +141,6 @@ export async function blobRoutes(
       .header("Content-Security-Policy", "default-src 'none'; sandbox")
       .header("Content-Disposition", "attachment")
       .header("Cache-Control", "private, no-store")
-      .send(createReadStream(blobPath(dir, hash.data)));
+      .send(createReadStream(blobPath(dir, hash)));
   });
 }

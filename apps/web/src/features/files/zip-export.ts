@@ -16,9 +16,7 @@ export async function downloadProjectZip(projectId: string, files: DocFile[], na
   const data = await new Promise<Uint8Array>((resolve, reject) =>
     zip(entries, (err, out) => (err ? reject(err) : resolve(out))),
   );
-  const url = URL.createObjectURL(
-    new Blob([data as Uint8Array<ArrayBuffer>], { type: "application/zip" }),
-  );
+  const url = URL.createObjectURL(new Blob([data.slice()], { type: "application/zip" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = name;

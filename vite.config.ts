@@ -17,7 +17,19 @@ export default defineConfig({
     ignorePatterns: ["**/dist/**"],
     plugins: ["typescript", "oxc"],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
-    rules: { "vite-plus/prefer-vite-plus-imports": "error" },
+    rules: {
+      "vite-plus/prefer-vite-plus-imports": "error",
+      "typescript/consistent-type-assertions": ["error", { assertionStyle: "never" }],
+      "typescript/no-restricted-types": [
+        "error",
+        {
+          types: {
+            Pick: "Declare an interface instead.",
+            Omit: "Declare an interface instead.",
+          },
+        },
+      ],
+    },
     options: { typeAware: true, typeCheck: true },
     overrides: [
       {
@@ -30,8 +42,16 @@ export default defineConfig({
         },
       },
       {
+        files: ["apps/web/src/components/ui/**"],
+        rules: { "typescript/no-restricted-types": "off" },
+      },
+      {
         files: ["apps/api/**", "apps/compiler/**"],
         env: { node: true },
+      },
+      {
+        files: ["**/tests/**", "**/*.test.ts", "**/*.test.tsx"],
+        rules: { "typescript/consistent-type-assertions": "off" },
       },
     ],
   },

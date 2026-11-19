@@ -1,6 +1,15 @@
 import nodemailer from "nodemailer";
 
-export type Mail = { to: string; subject: string; text: string; html: string };
+export interface MailContent {
+  subject: string;
+  text: string;
+  html: string;
+}
+
+export interface Mail extends MailContent {
+  to: string;
+}
+
 export type Mailer = (mail: Mail) => Promise<void>;
 
 /** `url` is an SMTP URL, e.g. smtps://user:app-password@smtp.gmail.com:465 */

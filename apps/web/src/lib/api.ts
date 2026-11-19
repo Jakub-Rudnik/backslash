@@ -1,15 +1,19 @@
 import {
+  AcceptedInvite,
+  AccountUsage,
+  CompileStarted,
+  CreatedInvite,
+  CreatedProject,
+  ErrorResponse,
+  InvitePreview,
+  ProjectInvite,
+  ProjectMember,
+  ProjectSummary,
+  ServerConfig,
   UploadedBlob,
-  type AccountUsage,
-  type CompileStarted,
-  type CreatedInvite,
   type GrantableRole,
-  type InvitePreview,
-  type ProjectInvite,
-  type ProjectMember,
-  type ProjectSummary,
-  type ServerConfig,
 } from "@backslash/shared";
+import * as z from "zod";
 
 const API_BASE = "/api";
 
@@ -23,59 +27,61 @@ export class ApiError extends Error {
 }
 
 async function errorMessage(res: Response) {
-  try {
-    const body: unknown = await res.json();
-    if (body && typeof body === "object" && "error" in body) {
-      if (typeof body.error === "string") return body.error;
-      const flat = body.error as { formErrors?: unknown; fieldErrors?: Record<string, unknown> };
-      const messages = [flat.formErrors, ...Object.values(flat.fieldErrors ?? {})]
-        .flatMap((m) => (Array.isArray(m) ? m : []))
-        .filter((m): m is string => typeof m === "string");
-      if (messages.length > 0) return messages.join(", ");
-    }
-  } catch {}
-  return `Request failed (${res.status})`;
+  const body = ErrorResponse.safeParse(await res.json().catch(() => null));
+  return body.success ? body.data.error : `Request failed (${res.status})`;
 }
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function send(method: string, path: string, body?: unknown): Promise<Response> {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: body === undefined ? {} : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
-  return res.status === 204 ? (undefined as T) : (res.json() as Promise<T>);
+  return res;
+}
+
+async function call<T>(schema: z.ZodType<T>, method: string, path: string, body?: unknown) {
+  const res = await send(method, path, body);
+  return schema.parse(await res.json());
 }
 
 const project = (id: string) => `/projects/${encodeURIComponent(id)}`;
 
 export const api = {
-  config: () => call<ServerConfig>("GET", "/config"),
-  usage: () => call<AccountUsage>("GET", "/account/usage"),
+  config: () => call(ServerConfig, "GET", "/config"),
+  usage: () => call(AccountUsage, "GET", "/account/usage"),
 
-  projects: () => call<ProjectSummary[]>("GET", "/projects"),
-  project: (id: string) => call<ProjectSummary>("GET", project(id)),
-  createProject: (name: string) => call<{ id: string }>("POST", "/projects", { name }),
-  renameProject: (id: string, name: string) => call<void>("PATCH", project(id), { name }),
-  deleteProject: (id: string) => call<void>("DELETE", project(id)),
+  projects: () => call(z.array(ProjectSummary), "GET", "/projects"),
+  project: (id: string) => call(ProjectSummary, "GET", project(id)),
+  createProject: (name: string) => call(CreatedProject, "POST", "/projects", { name }),
+  renameProject: async (id: string, name: string) => {
+    await send("PATCH", project(id), { name });
+  },
+  deleteProject: async (id: string) => {
+    await send("DELETE", project(id));
+  },
 
-  members: (id: string) => call<ProjectMember[]>("GET", `${project(id)}/members`),
-  setMemberRole: (id: string, userId: string, role: GrantableRole) =>
-    call<void>("PATCH", `${project(id)}/members/${encodeURIComponent(userId)}`, { role }),
-  removeMember: (id: string, userId: string) =>
-    call<void>("DELETE", `${project(id)}/members/${encodeURIComponent(userId)}`),
+  members: (id: string) => call(z.array(ProjectMember), "GET", `${project(id)}/members`),
+  setMemberRole: async (id: string, userId: string, role: GrantableRole) => {
+    await send("PATCH", `${project(id)}/members/${encodeURIComponent(userId)}`, { role });
+  },
+  removeMember: async (id: string, userId: string) => {
+    await send("DELETE", `${project(id)}/members/${encodeURIComponent(userId)}`);
+  },
 
-  invites: (id: string) => call<ProjectInvite[]>("GET", `${project(id)}/invites`),
+  invites: (id: string) => call(z.array(ProjectInvite), "GET", `${project(id)}/invites`),
   createInvite: (id: string, role: GrantableRole) =>
-    call<CreatedInvite>("POST", `${project(id)}/invites`, { role }),
-  revokeInvite: (id: string, inviteId: string) =>
-    call<void>("DELETE", `${project(id)}/invites/${encodeURIComponent(inviteId)}`),
-  invite: (token: string) => call<InvitePreview>("GET", `/invites/${encodeURIComponent(token)}`),
+    call(CreatedInvite, "POST", `${project(id)}/invites`, { role }),
+  revokeInvite: async (id: string, inviteId: string) => {
+    await send("DELETE", `${project(id)}/invites/${encodeURIComponent(inviteId)}`);
+  },
+  invite: (token: string) => call(InvitePreview, "GET", `/invites/${encodeURIComponent(token)}`),
   acceptInvite: (token: string) =>
-    call<{ projectId: string }>("POST", `/invites/${encodeURIComponent(token)}/accept`),
+    call(AcceptedInvite, "POST", `/invites/${encodeURIComponent(token)}/accept`),
 
   /** the server compiles its own copy of the project; the result appears in the doc */
-  compile: (id: string) => call<CompileStarted>("POST", `${project(id)}/compile`),
+  compile: (id: string) => call(CompileStarted, "POST", `${project(id)}/compile`),
 };
 
 export function pdfUrl(projectId: string, jobId: string) {
