@@ -21,6 +21,13 @@ pnpm monorepo, TypeScript everywhere. Postgres and Valkey run via `docker compos
 - `apps/collab` and `apps/compiler` are small single-purpose services and stay flat.
 - No `index.ts` barrel files, no fixed set of subfolders per feature. Create a new feature folder only when the code doesn't belong to an existing one.
 
+## Local setup
+
+- Requirements: Node, Docker, TeX Live with `latexmk`, and bubblewrap (`bwrap`, Linux) for the compile sandbox.
+- `docker compose up -d` starts Postgres, Valkey and Mailpit (inbox for password reset mails at http://localhost:8025).
+- Copy `.env.example` to `.env` in `apps/api`, `apps/collab` and `apps/compiler`. `BETTER_AUTH_SECRET` and `INTERNAL_SECRET` must be the same in `api` and `collab` (`openssl rand -base64 32`). Migrations run on startup.
+- API tests use a separate database: `docker compose exec postgres psql -U backslash -c "create database backslash_test"`.
+
 ## Toolchain
 
 The toolchain is Vite+, run through the global `vp` CLI. Docs are in `node_modules/vite-plus/docs`.
