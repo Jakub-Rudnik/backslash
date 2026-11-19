@@ -1,12 +1,14 @@
 import type { CompileError, ProjectRole } from "@backslash/shared";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import { useEffect, useEffectEvent, useState } from "react";
-import { PlayIcon } from "@hugeicons/core-free-icons";
+import { Download04Icon, MinusSignIcon, PlayIcon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
+import { cn } from "cn";
 import { Link, useParams } from "react-router";
 import { AppHeader } from "@/components/app-header";
 import { CollabStatus } from "@/features/editor/collab-status";
+import { CompileErrors } from "@/features/compile/compile-errors";
 import { CompileStatus } from "@/features/compile/compile-status";
 import { BlobViewer } from "@/features/files/blob-viewer";
 import { FileTree } from "@/features/files/file-tree";
@@ -29,6 +31,8 @@ import { api, ApiError, pdfUrl } from "@/lib/api";
 import { downloadProjectZip } from "@/features/files/zip-export";
 
 const PDF_MAX_AGE_MS = 50 * 60_000;
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+const DEFAULT_ZOOM_STEP = 2;
 
 /** True once local edits reached the server (it compiles its own copy), false on timeout. */
 function waitForSync(provider: HocuspocusProvider, timeoutMs = 5000): Promise<boolean> {
@@ -103,9 +107,12 @@ function ProjectEditor({
   const mainFile = project.files.find((f) => f.id === project.mainId) ?? null;
   const upload = useUpload(projectId, project, (id) => open(id));
 
+  const fileBase = name.replace(/[^\w.-]+/g, "-") || "project";
+  const [zoomStep, setZoomStep] = useState(DEFAULT_ZOOM_STEP);
+  const pdf = build.pdf?.jobId ? pdfUrl(projectId, build.pdf.jobId) : null;
+
   function downloadZip() {
-    const fileName = `${name.replace(/[^\w.-]+/g, "-") || "project"}.zip`;
-    downloadProjectZip(projectId, project.files, fileName).catch((err: unknown) =>
+    downloadProjectZip(projectId, project.files, `${fileBase}.zip`).catch((err: unknown) =>
       upload.report(`ZIP download failed: ${err instanceof Error ? err.message : String(err)}`),
     );
   }
@@ -214,29 +221,22 @@ function ProjectEditor({
   return (
     <div className="flex h-screen flex-col">
       <AppHeader>
-        <span className="max-w-48 shrink-0 truncate font-medium" title={name}>
+        <svg aria-hidden viewBox="0 0 10 20" className="mx-1 h-4 w-2 shrink-0 text-brand">
+          <line
+            x1="2"
+            y1="2"
+            x2="8"
+            y2="18"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
+        <span className="max-w-64 min-w-0 truncate font-medium" title={name}>
           {name}
         </span>
         {readOnly && <Badge variant="secondary">Read-only</Badge>}
-        <Button
-          size="sm"
-          onClick={() => void compile()}
-          disabled={isPending || !synced || !mainFile}
-          title={synced && !mainFile ? "Add a .tex file to compile" : undefined}
-        >
-          <HugeiconsIcon icon={PlayIcon} data-icon="inline-start" />
-          Compile
-        </Button>
-        <div className="min-w-0 flex-1">
-          <CompileStatus
-            compiling={compiling}
-            build={build.latest}
-            error={isPending ? null : (syncError ?? error)}
-            myName={me.name}
-            canJump={(e) => !!fileForError(e)}
-            onJump={jumpTo}
-          />
-        </div>
+        <div className="flex-1" />
         <CollabStatus status={status} me={me} peers={peers} />
         <ShareDialog projectId={projectId} role={role} />
       </AppHeader>
@@ -254,12 +254,90 @@ function ProjectEditor({
           />
         </ResizablePanel>
         <ResizableHandle />
-        <ResizablePanel defaultSize="42">{editorPanel}</ResizablePanel>
+        <ResizablePanel defaultSize="42" className="flex flex-col">
+          <div className="flex h-10 shrink-0 items-center border-b px-3 text-xs text-muted-foreground">
+            <span className="truncate font-mono">{active?.path}</span>
+          </div>
+          <div className="min-h-0 flex-1">{editorPanel}</div>
+        </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel defaultSize="42">
+        <ResizablePanel defaultSize="42" className="flex flex-col">
+          <div className="flex h-10 shrink-0 items-center gap-3 border-b px-2 text-sm">
+            <Button
+              size="sm"
+              className="h-7"
+              onClick={() => void compile()}
+              disabled={isPending || !synced || !mainFile}
+              title={synced && !mainFile ? "Add a .tex file to compile" : undefined}
+            >
+              <HugeiconsIcon icon={PlayIcon} data-icon="inline-start" />
+              Recompile
+            </Button>
+            <CompileStatus
+              compiling={compiling}
+              build={build.latest}
+              error={isPending ? null : (syncError ?? error)}
+              myName={me.name}
+            />
+            <div className="ml-auto flex shrink-0 items-center text-xs text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Zoom out"
+                disabled={zoomStep === 0}
+                onClick={() => setZoomStep(zoomStep - 1)}
+              >
+                <HugeiconsIcon icon={MinusSignIcon} />
+              </Button>
+              <button
+                type="button"
+                title="Reset zoom"
+                onClick={() => setZoomStep(DEFAULT_ZOOM_STEP)}
+                className="w-10 cursor-pointer text-center tabular-nums"
+              >
+                {Math.round(ZOOM_STEPS[zoomStep] * 100)}%
+              </button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Zoom in"
+                disabled={zoomStep === ZOOM_STEPS.length - 1}
+                onClick={() => setZoomStep(zoomStep + 1)}
+              >
+                <HugeiconsIcon icon={PlusSignIcon} />
+              </Button>
+              {pdf ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Download PDF"
+                  title="Download PDF"
+                  nativeButton={false}
+                  render={<a href={pdf} download={`${fileBase}.pdf`} />}
+                >
+                  <HugeiconsIcon icon={Download04Icon} />
+                </Button>
+              ) : (
+                <Button variant="ghost" size="icon-sm" aria-label="Download PDF" disabled>
+                  <HugeiconsIcon icon={Download04Icon} />
+                </Button>
+              )}
+            </div>
+          </div>
+          {!isPending && (
+            <CompileErrors
+              errors={build.latest?.errors ?? []}
+              canJump={(e) => !!fileForError(e)}
+              onJump={jumpTo}
+            />
+          )}
           <PdfViewer
-            url={build.pdf?.jobId ? pdfUrl(projectId, build.pdf.jobId) : null}
-            className="h-full overflow-auto bg-muted p-4"
+            url={pdf}
+            zoom={ZOOM_STEPS[zoomStep]}
+            className={cn(
+              "min-h-0 flex-1 overflow-auto bg-muted p-4 transition-opacity",
+              build.latest?.status === "error" && "opacity-50",
+            )}
           />
         </ResizablePanel>
       </ResizablePanelGroup>
