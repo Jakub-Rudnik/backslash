@@ -68,3 +68,7 @@ docker compose -f deploy/compose.yml up -d --build
 ## Architecture decisions
 
 See [`docs/adr`](docs/adr).
+
+## License
+
+[MIT](LICENSE)
