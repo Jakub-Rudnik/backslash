@@ -13,10 +13,12 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 
 type PdfViewerProps = {
   url: string | null;
+  /** 1 fits the page to the container width */
+  zoom?: number;
   className?: string;
 };
 
-export function PdfViewer({ url, className }: PdfViewerProps) {
+export function PdfViewer({ url, zoom = 1, className }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const width = useElementWidth(containerRef);
   const [loaded, setLoaded] = useState<{
@@ -61,7 +63,7 @@ export function PdfViewer({ url, className }: PdfViewerProps) {
       {pdf &&
         width > 0 &&
         Array.from({ length: pdf.numPages }, (_, i) => (
-          <PdfPage key={i + 1} pdf={pdf} pageNumber={i + 1} width={width} />
+          <PdfPage key={i + 1} pdf={pdf} pageNumber={i + 1} width={Math.floor(width * zoom)} />
         ))}
     </div>
   );

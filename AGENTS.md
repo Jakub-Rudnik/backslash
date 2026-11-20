@@ -21,6 +21,13 @@ pnpm monorepo, TypeScript everywhere. Postgres and Valkey run via `docker compos
 - `apps/collab` and `apps/compiler` are small single-purpose services and stay flat.
 - No `index.ts` barrel files, no fixed set of subfolders per feature. Create a new feature folder only when the code doesn't belong to an existing one.
 
+## Local setup
+
+- Requirements: Node, Docker, TeX Live with `latexmk`, and bubblewrap (`bwrap`, Linux) for the compile sandbox.
+- `docker compose up -d` starts Postgres, Valkey and Mailpit (inbox for password reset mails at http://localhost:8025).
+- Copy `.env.example` to `.env` in `apps/api`, `apps/collab` and `apps/compiler`. `BETTER_AUTH_SECRET` and `INTERNAL_SECRET` must be the same in `api` and `collab` (`openssl rand -base64 32`). Migrations run on startup.
+- API tests use a separate database: `docker compose exec postgres psql -U backslash -c "create database backslash_test"`.
+
 ## Toolchain
 
 The toolchain is Vite+, run through the global `vp` CLI. Docs are in `node_modules/vite-plus/docs`.
@@ -51,6 +58,13 @@ A pre-commit hook runs `vp check --fix` on staged files. Before you finish a cha
 ## UI changes
 
 After changing UI, run `vp run dev` and check the changed screens in a real browser: use the browser built into your environment, or the Playwright MCP server from `.mcp.json`. Check light and dark theme, a narrow (mobile) width, empty, loading and error states, and that the console has no errors. A passing `vp check` does not mean the UI works.
+
+## Git and versions
+
+- Every feature or fix goes on its own branch off `main` (`feat/<name>`, `fix/<name>`, `chore/<name>`) and is merged through a pull request. Do not commit features straight to `main`.
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org): `type(scope): summary`, e.g. `feat(web): ...`, `fix(api): ...`. Types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`, `ci`. Mark breaking changes with `!` (`feat(api)!: ...`).
+- The project has one version, in the root `package.json`, following [SemVer](https://semver.org). The apps and packages have none. While in alpha (`0.x`), a branch with a `feat` or a breaking change bumps the minor version (`0.1.0` → `0.2.0`), and a branch with only fixes bumps the patch version (`0.1.0` → `0.1.1`). Other changes (`docs`, `chore`, `refactor` and so on) do not bump it.
+- No git tags or GitHub releases for now.
 
 ## Formatting
 

@@ -35,6 +35,11 @@ class PathSet {
     this.files.add(path);
     for (const d of parentDirs(path)) this.dirs.add(d);
   }
+
+  addDir(path: string) {
+    this.dirs.add(path);
+    for (const d of parentDirs(path)) this.dirs.add(d);
+  }
 }
 
 function withSuffix(segment: string, n: number, isFile: boolean) {
@@ -63,9 +68,10 @@ function resolvePathConflicts<T extends { id: string; path: string }>(files: T[]
   });
 }
 
-/** First path clashing with an earlier one, or null. */
-function findPathConflict(paths: string[]): string | null {
+/** First file path clashing with an earlier one or with one of the folders `dirs`, or null. */
+function findPathConflict(paths: string[], dirs: string[] = []): string | null {
   const taken = new PathSet();
+  for (const d of dirs) taken.addDir(d);
   for (const p of paths) {
     if (taken.clash(p) !== -1) return p;
     taken.add(p);
