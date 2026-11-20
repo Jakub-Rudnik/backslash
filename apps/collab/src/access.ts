@@ -1,20 +1,21 @@
-import { projectMembers, type Db, type ProjectRole } from "@backslash/db";
+import { projectMembers, user, type Db, type ProjectRole } from "@backslash/db";
 import type { Connection, Hocuspocus } from "@hocuspocus/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 /** what onAuthenticate stored for the connection */
 export type ConnectionContext = { userId: string; role: ProjectRole };
 
 /**
- * Keeps open connections in line with project membership: a socket whose user lost access,
- * or whose role changed, is closed. The client reconnects and goes through onAuthenticate again.
+ * Keeps open connections in line with project membership: a socket whose user lost access
+ * (or was banned), or whose role changed, is closed. The client reconnects and goes through onAuthenticate again.
  */
 export function accessReconciler(db: Db, hocuspocus: Hocuspocus<ConnectionContext>) {
   async function roles(projectId: string) {
     const rows = await db
       .select({ userId: projectMembers.userId, role: projectMembers.role })
       .from(projectMembers)
-      .where(eq(projectMembers.projectId, projectId));
+      .innerJoin(user, eq(user.id, projectMembers.userId))
+      .where(and(eq(projectMembers.projectId, projectId), eq(user.banned, false)));
     return new Map(rows.map((r) => [r.userId, r.role]));
   }
 

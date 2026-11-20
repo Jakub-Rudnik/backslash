@@ -17,14 +17,14 @@ import * as z from "zod";
 import { requireProject, requireUser } from "../../lib/access.ts";
 import type { ProjectEvents } from "../../lib/events.ts";
 import { rateLimit } from "../../lib/rate-limit.ts";
-import { ownedProjectCount } from "../../lib/usage.ts";
+import { ownedProjectCount, quotasOf, type Quotas } from "../../lib/usage.ts";
 import type { RateLimitStore } from "@backslash/db/auth";
 
 export type ProjectRoutesOptions = {
   db: Db;
   events: ProjectEvents;
   limits: RateLimitStore;
-  maxProjectsPerUser: number;
+  quotas: Quotas;
 };
 
 const INVITE_TTL_MS = 7 * 24 * 3600_000;
@@ -41,7 +41,7 @@ function badRequest(reply: FastifyReply, error: z.ZodError) {
 
 export async function projectRoutes(
   app: FastifyInstance,
-  { db, events, limits, maxProjectsPerUser }: ProjectRoutesOptions,
+  { db, events, limits, quotas }: ProjectRoutesOptions,
 ) {
   // --- projects ---
 
@@ -70,10 +70,11 @@ export async function projectRoutes(
     const body = CreateProject.safeParse(req.body);
     if (!body.success) return badRequest(reply, body.error);
     if (!(await rateLimit(limits, req, reply, "createProject"))) return reply;
-    if ((await ownedProjectCount(db, me.id)) >= maxProjectsPerUser) {
+    const { projectsPerUser } = await quotasOf(db, me.id, quotas);
+    if ((await ownedProjectCount(db, me.id)) >= projectsPerUser) {
       return reply
         .code(403)
-        .send({ error: `You can own at most ${maxProjectsPerUser} projects, delete one first` });
+        .send({ error: `You can own at most ${projectsPerUser} projects, delete one first` });
     }
     const id = newId();
     await db.transaction(async (tx) => {

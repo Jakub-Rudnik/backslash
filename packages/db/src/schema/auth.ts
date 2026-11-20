@@ -1,4 +1,6 @@
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+
+export const userRole = pgEnum("user_role", ["user", "admin"]);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -8,6 +10,12 @@ export const user = pgTable("user", {
   image: text("image"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  role: userRole("role").notNull().default("user"),
+  /** a banned user can't sign in; banning also ends their sessions */
+  banned: boolean("banned").notNull().default(false),
+  /** set by an admin; null means the server-wide default */
+  projectLimit: integer("project_limit"),
+  storageLimitMb: integer("storage_limit_mb"),
 });
 
 export const session = pgTable(

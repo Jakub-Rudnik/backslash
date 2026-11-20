@@ -1,6 +1,9 @@
 import {
   AcceptedInvite,
   AccountUsage,
+  AdminProjectPage,
+  AdminStats,
+  AdminUserPage,
   CompileStarted,
   CreatedInvite,
   CreatedProject,
@@ -12,6 +15,7 @@ import {
   ServerConfig,
   UploadedBlob,
   type GrantableRole,
+  type UpdateAdminUser,
 } from "@backslash/shared";
 import * as z from "zod";
 
@@ -82,6 +86,27 @@ export const api = {
 
   /** the server compiles its own copy of the project; the result appears in the doc */
   compile: (id: string) => call(CompileStarted, "POST", `${project(id)}/compile`),
+
+  admin: {
+    stats: () => call(AdminStats, "GET", "/admin/stats"),
+    users: (q: string, page: number) =>
+      call(AdminUserPage, "GET", `/admin/users?${new URLSearchParams({ q, page: String(page) })}`),
+    projects: (q: string, page: number) =>
+      call(
+        AdminProjectPage,
+        "GET",
+        `/admin/projects?${new URLSearchParams({ q, page: String(page) })}`,
+      ),
+    updateUser: async (userId: string, changes: UpdateAdminUser) => {
+      await send("PATCH", `/admin/users/${encodeURIComponent(userId)}`, changes);
+    },
+    signOutUser: async (userId: string) => {
+      await send("POST", `/admin/users/${encodeURIComponent(userId)}/sign-out`);
+    },
+    deleteUser: async (userId: string) => {
+      await send("DELETE", `/admin/users/${encodeURIComponent(userId)}`);
+    },
+  },
 };
 
 export function pdfUrl(projectId: string, jobId: string) {

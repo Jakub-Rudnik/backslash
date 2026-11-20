@@ -62,6 +62,13 @@ docker compose -f deploy/compose.yml up -d --build
 
 - **VPS with a domain:** point the DNS record at the server, open ports 80 and 443, set `SITE_ADDRESS=latex.example.com` and `PUBLIC_URL=https://latex.example.com`. Caddy gets the certificate.
 - **Cloudflare Tunnel or `tailscale serve`:** the tunnel terminates TLS and forwards to Caddy over HTTP. Set `SITE_ADDRESS=:80`, `HTTP_PORT=127.0.0.1:8080`, `TRUSTED_PROXIES=private_ranges` and `PUBLIC_URL` to the tunnel's URL, and point the tunnel at `http://localhost:8080`.
+- Make yourself an admin (the admin panel is at `/admin`; further admins can be added there):
+
+```bash
+docker compose -f deploy/compose.yml exec postgres psql -U backslash backslash \
+  -c "update \"user\" set role = 'admin' where email = 'you@example.com'"
+```
+
 - Data lives in the volumes `postgres-data`, `blobs` (uploads) and `valkey-data`. Back up Postgres (`docker compose -f deploy/compose.yml exec postgres pg_dump -U backslash backslash`) and the `blobs` volume.
 - The compiler needs unprivileged user namespaces. On Ubuntu 23.10+ that means `sysctl kernel.apparmor_restrict_unprivileged_userns=0`; if the compiler exits with "Compile sandbox unavailable", check this first.
 

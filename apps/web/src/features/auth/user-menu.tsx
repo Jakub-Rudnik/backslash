@@ -1,4 +1,4 @@
-import { Logout01Icon, Settings02Icon } from "@hugeicons/core-free-icons";
+import { DashboardSquare01Icon, Logout01Icon, Settings02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -54,6 +54,12 @@ export function UserMenu() {
             <HugeiconsIcon icon={Settings02Icon} />
             Settings
           </DropdownMenuItem>
+          {account.role === "admin" && (
+            <DropdownMenuItem onClick={() => void navigate("/admin")}>
+              <HugeiconsIcon icon={DashboardSquare01Icon} />
+              Admin panel
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => void signOut()}>
             <HugeiconsIcon icon={Logout01Icon} />
             Sign out

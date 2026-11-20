@@ -1,10 +1,11 @@
 import { CompileRequest, type ProjectFile } from "@backslash/shared";
 import { getMainFile, listFiles } from "@backslash/shared/doc";
-import { projectBlobs, projects, type Db } from "@backslash/db";
+import { compiles, isForeignKeyViolation, projectBlobs, projects, type Db } from "@backslash/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import * as Y from "yjs";
 import { blobExists } from "../blobs/blob.store.ts";
 import type { SnapshotSource } from "./collab.client.ts";
+import type { CompileRecord } from "./compile.scheduler.ts";
 
 export class CompileInputError extends Error {}
 
@@ -53,6 +54,15 @@ export async function buildCompileRequest(
     throw new CompileInputError(parsed.error.issues.map((i) => i.message).join(", "));
   }
   return parsed.data;
+}
+
+/** Skips compiles of projects (or by users) deleted while they ran. */
+export async function recordCompile(db: Db, record: CompileRecord) {
+  try {
+    await db.insert(compiles).values(record);
+  } catch (err) {
+    if (!isForeignKeyViolation(err)) throw err;
+  }
 }
 
 export async function nextCompileSeq(db: Db, projectId: string): Promise<number | null> {
