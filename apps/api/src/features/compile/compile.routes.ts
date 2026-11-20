@@ -9,7 +9,7 @@ import { rateLimit } from "../../lib/rate-limit.ts";
 import type { RateLimitStore } from "@backslash/db/auth";
 import type { CompileBackend } from "./compile.backend.ts";
 import { compileScheduler } from "./compile.scheduler.ts";
-import { buildCompileRequest, nextCompileSeq } from "./compile.service.ts";
+import { buildCompileRequest, nextCompileSeq, recordCompile } from "./compile.service.ts";
 import type { BuildPublisher, SnapshotSource } from "./collab.client.ts";
 
 export type CompileRoutesOptions = {
@@ -32,6 +32,7 @@ export async function compileRoutes(
     prepare: (projectId) => buildCompileRequest(db, snapshots, blobDir, projectId),
     backend,
     publish,
+    record: (compile) => recordCompile(db, compile),
     log: app.log,
   });
 
@@ -39,7 +40,8 @@ export async function compileRoutes(
     const access = await requireProject(db, req, reply, "viewer");
     if (!access) return reply;
     if (!(await rateLimit(limits, req, reply, "compile"))) return reply;
-    const seq = await scheduler.request(access.projectId, access.user.name);
+    const { id, name } = access.user;
+    const seq = await scheduler.request(access.projectId, { id, name });
     if (seq === null) return reply.code(404).send({ error: "Project not found" });
     return reply.code(202).send({ seq } satisfies CompileStarted);
   });

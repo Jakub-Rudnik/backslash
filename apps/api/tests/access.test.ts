@@ -2,7 +2,8 @@
  * Access control: every project endpoint against owner / editor / viewer / stranger / anonymous.
  * Runs against a real Postgres (TEST_DATABASE_URL) with real Better Auth sessions.
  */
-import { createDb, runMigrations } from "@backslash/db";
+import { createDb, projects, runMigrations, user } from "@backslash/db";
+import { eq } from "drizzle-orm";
 import { createAuth } from "@backslash/db/auth";
 import type { CompileRequest, SharedBuild } from "@backslash/shared";
 import { createBlobFile, createFile, seedProject } from "@backslash/shared/doc";
@@ -583,5 +584,154 @@ describe("account", () => {
     expect((await request(null, { method: "GET", url: "/api/account/usage" })).statusCode).toBe(
       401,
     );
+  });
+});
+
+describe("admin", () => {
+  let admin: User & { email: string };
+
+  beforeAll(async () => {
+    admin = await signUp("admin");
+    await db.update(user).set({ role: "admin" }).where(eq(user.id, admin.id));
+  });
+
+  const signIn = (email: string, remoteAddress: string) =>
+    app.inject({
+      method: "POST",
+      url: "/api/auth/sign-in/email",
+      remoteAddress,
+      payload: { email, password: "password123" },
+    });
+
+  test("only admins reach the admin API", async () => {
+    const target = `/api/admin/users/${users.stranger.id}`;
+    const endpoints: InjectOptions[] = [
+      { method: "GET", url: "/api/admin/stats" },
+      { method: "GET", url: "/api/admin/users" },
+      { method: "GET", url: "/api/admin/projects" },
+      { method: "PATCH", url: target, payload: { role: "admin" } },
+      { method: "POST", url: `${target}/sign-out` },
+      { method: "DELETE", url: target },
+    ];
+    for (const endpoint of endpoints) {
+      const label = JSON.stringify(endpoint);
+      expect((await request(null, endpoint)).statusCode, label).toBe(401);
+      expect((await request(users.owner, endpoint)).statusCode, label).toBe(403);
+    }
+    expect((await request(admin, endpoints[0]!)).statusCode).toBe(200);
+  });
+
+  test("users can't make themselves admins", async () => {
+    await request(users.stranger, {
+      method: "POST",
+      url: "/api/auth/update-user",
+      payload: { role: "admin", banned: false },
+    });
+    const [row] = await db
+      .select({ role: user.role })
+      .from(user)
+      .where(eq(user.id, users.stranger.id));
+    expect(row?.role).toBe("user");
+    const res = await request(users.stranger, { method: "GET", url: "/api/admin/stats" });
+    expect(res.statusCode).toBe(403);
+  });
+
+  test("lists show usage but never project names", async () => {
+    const writer = await signUp("writer");
+    const p = await createProject(writer, "Secret novel");
+    expect((await uploadBlob(writer, p, "12345")).statusCode).toBe(200);
+    await compileProject(writer, p);
+
+    const stats = await request(admin, { method: "GET", url: "/api/admin/stats" });
+    expect(stats.statusCode, stats.body).toBe(200);
+    const { users: userStats, compiles } = stats.json<{
+      users: { total: number };
+      compiles: { date: string; success: number }[];
+    }>();
+    expect(userStats.total).toBeGreaterThanOrEqual(5);
+    expect(compiles).toHaveLength(30);
+    expect(compiles.at(-1)!.success).toBeGreaterThan(0);
+
+    const list = await request(admin, {
+      method: "GET",
+      url: `/api/admin/users?q=${encodeURIComponent(writer.email)}`,
+    });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.json()).toMatchObject({
+      total: 1,
+      users: [{ id: writer.id, projects: 1, storageBytes: 5, compiles30d: 1 }],
+    });
+
+    const projectList = await request(admin, { method: "GET", url: `/api/admin/projects?q=${p}` });
+    expect(projectList.statusCode, projectList.body).toBe(200);
+    expect(projectList.json()).toMatchObject({
+      total: 1,
+      projects: [{ id: p, members: 1, uploads: 1, uploadBytes: 5, compiles30d: 1 }],
+    });
+    expect(projectList.body).not.toContain("Secret novel");
+  });
+
+  test("per-user limits override the defaults until reset", async () => {
+    const target = await signUp("limited");
+    const setLimits = (payload: object) =>
+      request(admin, { method: "PATCH", url: `/api/admin/users/${target.id}`, payload });
+    const create = () =>
+      request(target, { method: "POST", url: "/api/projects", payload: { name: "x" } });
+
+    expect((await setLimits({ projectLimit: 1, storageLimitMb: 5 })).statusCode).toBe(204);
+    expect((await create()).statusCode).toBe(201);
+    expect((await create()).statusCode).toBe(403);
+    const usage = (await request(target, { method: "GET", url: "/api/account/usage" })).json<{
+      projects: { limit: number };
+      storage: { limit: number };
+    }>();
+    expect(usage.projects.limit).toBe(1);
+    expect(usage.storage.limit).toBe(5 * 1024 * 1024);
+
+    expect((await setLimits({ projectLimit: null })).statusCode).toBe(204);
+    expect((await create()).statusCode).toBe(201);
+    expect((await setLimits({ projectLimit: -1 })).statusCode).toBe(400);
+  });
+
+  test("a banned user is signed out everywhere and can't sign in until unbanned", async () => {
+    const target = await signUp("troll");
+    const p = await createProject(target, "Troll");
+    const ban = (banned: boolean) =>
+      request(admin, {
+        method: "PATCH",
+        url: `/api/admin/users/${target.id}`,
+        payload: { banned },
+      });
+
+    revoked.length = 0;
+    expect((await ban(true)).statusCode).toBe(204);
+    expect(revoked).toContain(p);
+    expect((await request(target, { method: "GET", url: "/api/projects" })).statusCode).toBe(401);
+    expect((await signIn(target.email, "10.7.0.1")).statusCode).toBe(403);
+
+    expect((await ban(false)).statusCode).toBe(204);
+    expect((await signIn(target.email, "10.7.0.1")).statusCode).toBe(200);
+  });
+
+  test("deleting a user removes their projects and their access to shared ones", async () => {
+    const target = await signUp("leaving");
+    const own = await createProject(target, "Own");
+    await join_(target, await invite(users.owner, projectId, "viewer"));
+
+    revoked.length = 0;
+    const remove = () => request(admin, { method: "DELETE", url: `/api/admin/users/${target.id}` });
+    expect((await remove()).statusCode).toBe(204);
+    expect(revoked).toEqual(expect.arrayContaining([own, projectId]));
+    const [left] = await db.select().from(projects).where(eq(projects.id, own));
+    expect(left).toBeUndefined();
+    expect((await remove()).statusCode).toBe(404);
+  });
+
+  test("admins can't lock themselves out", async () => {
+    const url = `/api/admin/users/${admin.id}`;
+    const ban = await request(admin, { method: "PATCH", url, payload: { banned: true } });
+    const demote = await request(admin, { method: "PATCH", url, payload: { role: "user" } });
+    const remove = await request(admin, { method: "DELETE", url });
+    expect([ban.statusCode, demote.statusCode, remove.statusCode]).toEqual([400, 400, 400]);
   });
 });

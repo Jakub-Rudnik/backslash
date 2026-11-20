@@ -101,3 +101,24 @@ export const collabDocuments = pgTable("collab_documents", {
   data: bytea("data").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const compileOutcome = pgEnum("compile_outcome", ["success", "error", "timeout", "failed"]);
+
+/** One row per compile that ran, for usage stats; nothing of the project's content. */
+export const compiles = pgTable(
+  "compiles",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+    /** who asked for it */
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    outcome: compileOutcome("outcome").notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("compiles_created_at_idx").on(t.createdAt),
+    index("compiles_project_id_idx").on(t.projectId),
+    index("compiles_user_id_idx").on(t.userId),
+  ],
+);

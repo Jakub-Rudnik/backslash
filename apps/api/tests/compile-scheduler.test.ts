@@ -1,16 +1,21 @@
 import type { CompileRequest, SharedBuild } from "@backslash/shared";
 import { expect, test } from "vite-plus/test";
 import { CompileTimeoutError } from "../src/features/compile/compile.backend.ts";
-import { compileScheduler } from "../src/features/compile/compile.scheduler.ts";
+import { compileScheduler, type CompileRecord } from "../src/features/compile/compile.scheduler.ts";
 import { CompileInputError } from "../src/features/compile/compile.service.ts";
 
 type Run = { state: string; finish: (outcome?: Error) => void };
+
+const ann = { id: "u1", name: "Ann" };
+const bob = { id: "u2", name: "Bob" };
+const cid = { id: "u3", name: "Cid" };
 
 function setup() {
   let seq = 0;
   let state = "v1";
   const runs: Run[] = [];
   const published: SharedBuild[] = [];
+  const records: CompileRecord[] = [];
   const log = { error: () => {} } as never;
 
   const scheduler = compileScheduler({
@@ -31,6 +36,7 @@ function setup() {
       pdfPath: () => "",
     },
     publish: async (_projectId, build) => void published.push(build),
+    record: async (compile) => void records.push(compile),
     log,
   });
 
@@ -38,6 +44,7 @@ function setup() {
     scheduler,
     runs,
     published,
+    records,
     edit: (next: string) => {
       state = next;
     },
@@ -47,13 +54,13 @@ function setup() {
 test("requests during a compile collapse into one more compile of the latest state", async () => {
   const { scheduler, runs, published, edit } = setup();
 
-  const first = scheduler.request("p1", "Ann");
+  const first = scheduler.request("p1", ann);
   await expect.poll(() => runs.length).toBe(1);
 
   edit("v2");
-  const second = scheduler.request("p1", "Bob");
+  const second = scheduler.request("p1", bob);
   edit("v3");
-  const third = scheduler.request("p1", "Cid");
+  const third = scheduler.request("p1", cid);
   expect(await first).toBe(1);
   expect(await second).toBe(2);
   expect(await third).toBe(2);
@@ -73,17 +80,17 @@ test("requests during a compile collapse into one more compile of the latest sta
 
 test("projects compile independently", async () => {
   const { scheduler, runs } = setup();
-  void scheduler.request("p1", "Ann");
-  void scheduler.request("p2", "Ann");
+  void scheduler.request("p1", ann);
+  void scheduler.request("p2", ann);
   await expect.poll(() => runs.length).toBe(2);
 });
 
 test("failures are published as error results and don't block the next compile", async () => {
-  const { scheduler, runs, published } = setup();
+  const { scheduler, runs, published, records } = setup();
 
-  void scheduler.request("p1", "Ann");
+  void scheduler.request("p1", ann);
   await expect.poll(() => runs.length).toBe(1);
-  void scheduler.request("p1", "Ann");
+  void scheduler.request("p1", bob);
   runs[0]!.finish(new CompileTimeoutError());
   await expect.poll(() => runs.length).toBe(2);
   runs[1]!.finish(new CompileInputError("Add a .tex file to compile"));
@@ -94,12 +101,19 @@ test("failures are published as error results and don't block the next compile",
     ["error", null, "Add a .tex file to compile"],
   ]);
 
-  void scheduler.request("p1", "Ann");
+  void scheduler.request("p1", ann);
   await expect.poll(() => runs.length).toBe(3);
+  runs[2]!.finish(new Error("worker crashed"));
+  await expect.poll(() => records.length).toBe(3);
+  expect(records.map((r) => [r.projectId, r.userId, r.outcome])).toEqual([
+    ["p1", "u1", "timeout"],
+    ["p1", "u2", "error"],
+    ["p1", "u1", "failed"],
+  ]);
 });
 
 test("a missing project gets no compile", async () => {
   const { scheduler, runs } = setup();
-  expect(await scheduler.request("missing", "Ann")).toBeNull();
+  expect(await scheduler.request("missing", ann)).toBeNull();
   expect(runs).toHaveLength(0);
 });

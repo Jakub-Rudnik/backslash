@@ -63,6 +63,91 @@ const AccountUsage = z.object({
 /** the compile that will include the caller's edits; its result appears in the doc */
 const CompileStarted = z.object({ seq: z.number() });
 
+/* Admin */
+
+const UserRole = z.enum(["user", "admin"]);
+
+/** null limits fall back to the server-wide defaults */
+const UpdateAdminUser = z
+  .object({
+    role: UserRole,
+    banned: z.boolean(),
+    projectLimit: z.number().int().min(0).max(100_000).nullable(),
+    storageLimitMb: z.number().int().min(0).max(10_000_000).nullable(),
+  })
+  .partial();
+
+const AdminListQuery = z.object({
+  q: z.string().trim().max(200).optional(),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+});
+
+const CompileDay = z.object({
+  /** UTC, YYYY-MM-DD */
+  date: z.string(),
+  success: z.number(),
+  error: z.number(),
+  timeout: z.number(),
+  failed: z.number(),
+});
+
+const AdminStats = z.object({
+  users: z.object({
+    total: z.number(),
+    new7d: z.number(),
+    new30d: z.number(),
+    active7d: z.number(),
+    banned: z.number(),
+  }),
+  projects: z.object({ total: z.number(), new30d: z.number() }),
+  storageBytes: z.number(),
+  /** last 30 days, oldest first */
+  compiles: z.array(CompileDay),
+  compileAvgMs: z.number().nullable(),
+});
+
+const AdminUser = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+  role: UserRole,
+  banned: z.boolean(),
+  createdAt: z.string(),
+  lastActiveAt: z.string().nullable(),
+  projects: z.number(),
+  storageBytes: z.number(),
+  compiles30d: z.number(),
+  projectLimit: z.number().nullable(),
+  storageLimitMb: z.number().nullable(),
+});
+
+const AdminUserPage = z.object({
+  users: z.array(AdminUser),
+  total: z.number(),
+  pageSize: z.number(),
+  defaults: z.object({ projectLimit: z.number(), storageLimitMb: z.number() }),
+});
+
+/** metadata only: names and content of projects stay private */
+const AdminProject = z.object({
+  id: z.string(),
+  ownerName: z.string(),
+  ownerEmail: z.string(),
+  members: z.number(),
+  uploads: z.number(),
+  uploadBytes: z.number(),
+  docBytes: z.number(),
+  compiles30d: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const AdminProjectPage = z.object({
+  projects: z.array(AdminProject),
+  total: z.number(),
+  pageSize: z.number(),
+});
+
 type ProjectRole = z.infer<typeof ProjectRole>;
 type GrantableRole = z.infer<typeof GrantableRole>;
 type ErrorResponse = z.infer<typeof ErrorResponse>;
@@ -76,10 +161,25 @@ type AcceptedInvite = z.infer<typeof AcceptedInvite>;
 type ServerConfig = z.infer<typeof ServerConfig>;
 type AccountUsage = z.infer<typeof AccountUsage>;
 type CompileStarted = z.infer<typeof CompileStarted>;
+type UserRole = z.infer<typeof UserRole>;
+type UpdateAdminUser = z.infer<typeof UpdateAdminUser>;
+type CompileDay = z.infer<typeof CompileDay>;
+type AdminStats = z.infer<typeof AdminStats>;
+type AdminUser = z.infer<typeof AdminUser>;
+type AdminUserPage = z.infer<typeof AdminUserPage>;
+type AdminProject = z.infer<typeof AdminProject>;
+type AdminProjectPage = z.infer<typeof AdminProjectPage>;
 
 export {
   AcceptedInvite,
   AccountUsage,
+  AdminListQuery,
+  AdminProject,
+  AdminProjectPage,
+  AdminStats,
+  AdminUser,
+  AdminUserPage,
+  CompileDay,
   COLLAB_REVOKE_CHANNEL,
   CompileStarted,
   CreatedInvite,
@@ -95,6 +195,8 @@ export {
   ProjectRole,
   ProjectSummary,
   ServerConfig,
+  UpdateAdminUser,
   UpdateMember,
   UpdateProject,
+  UserRole,
 };

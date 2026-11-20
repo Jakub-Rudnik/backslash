@@ -18,6 +18,15 @@ export function requireUser(req: FastifyRequest, reply: FastifyReply): SessionUs
   return null;
 }
 
+/** Sends 401 when not signed in, 403 when not an admin of the whole app. */
+export function requireAdmin(req: FastifyRequest, reply: FastifyReply): SessionUser | null {
+  const user = requireUser(req, reply);
+  if (!user) return null;
+  if (user.role === "admin") return user;
+  void reply.code(403).send({ error: "Requires admin access" });
+  return null;
+}
+
 const ProjectParams = z.object({ id: ProjectId });
 
 export type ProjectAccess = { user: SessionUser; projectId: string; role: ProjectRole };

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import "./index.css";
-import { RequireAuth } from "./features/auth/require-auth.tsx";
+import { FullPageMessage, RequireAuth } from "./features/auth/require-auth.tsx";
 import { DashboardPage } from "./pages/dashboard-page.tsx";
 import { ForgotPasswordPage } from "./pages/forgot-password-page.tsx";
 import { InvitePage } from "./pages/invite-page.tsx";
@@ -32,6 +32,20 @@ const router = createBrowserRouter([
         <ProjectPage />
       </RequireAuth>
     ),
+  },
+  {
+    path: "/admin",
+    hydrateFallbackElement: <FullPageMessage>Loading…</FullPageMessage>,
+    lazy: async () => {
+      const { AdminPage } = await import("./pages/admin-page.tsx");
+      return {
+        element: (
+          <RequireAuth>
+            <AdminPage />
+          </RequireAuth>
+        ),
+      };
+    },
   },
   {
     path: "/invite/:token",

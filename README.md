@@ -20,6 +20,7 @@ Write LaTeX with other people in real time, compile it to PDF on your own server
 - **Sharing.** Owner, editor and viewer roles. Invite people with a link, change their role or remove them, and they lose access right away, including open connections.
 - **Accounts.** Email and password with password reset mails, or GitHub login.
 - **Limits.** Rate limits and per-user quotas, so one account or script can't fill the disk or keep the compiler busy for everyone else.
+- **Admin panel.** Manage users and admins, change limits per user and see compile stats.
 
 ## Compile sandbox
 
@@ -57,6 +58,13 @@ One machine with Docker Compose: Caddy (HTTPS, serves the web app, proxies `/api
 - **Cloudflare Tunnel or `tailscale serve`:** the tunnel terminates TLS and forwards to Caddy over HTTP. Set `SITE_ADDRESS=:80`, `HTTP_PORT=127.0.0.1:8080`, `TRUSTED_PROXIES=private_ranges` and `PUBLIC_URL` to the tunnel's URL, and point the tunnel at `http://localhost:8080`.
 - **GitHub login** (optional): set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, callback URL `<PUBLIC_URL>/api/auth/callback/github`.
 - **Password reset mails** (optional): set `SMTP_URL` and `MAIL_FROM`.
+- **Admin:** the admin panel is at `/admin` (users, per-user limits, compile stats). Make the first admin by hand, further admins can be added there:
+
+  ```bash
+  docker compose -f deploy/compose.yml exec postgres psql -U backslash backslash \
+    -c "update \"user\" set role = 'admin' where email = 'you@example.com'"
+  ```
+
 - **Backups:** data lives in the volumes `postgres-data`, `blobs` (uploads) and `valkey-data`. Back up Postgres (`docker compose -f deploy/compose.yml exec postgres pg_dump -U backslash backslash`) and the `blobs` volume.
 - **Ubuntu 23.10+:** the compiler needs unprivileged user namespaces, so set `sysctl kernel.apparmor_restrict_unprivileged_userns=0`. If the compiler exits with "Compile sandbox unavailable", check this first.
 

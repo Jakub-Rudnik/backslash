@@ -9,7 +9,7 @@ import { Readable } from "node:stream";
 import * as z from "zod";
 import { requireProject } from "../../lib/access.ts";
 import { rateLimit } from "../../lib/rate-limit.ts";
-import { storageUsedBy } from "../../lib/usage.ts";
+import { MB, quotasOf, storageUsedBy, type Quotas } from "../../lib/usage.ts";
 import { isReferenced, lockBlob } from "./blob.gc.ts";
 import { blobExists, blobPath, BlobTooLargeError, storeBlob } from "./blob.store.ts";
 
@@ -17,11 +17,8 @@ export type BlobRoutesOptions = {
   db: Db;
   dir: string;
   limits: RateLimitStore;
-  /** bytes of uploaded files across all projects a user owns */
-  storagePerUser: number;
+  quotas: Quotas;
 };
-
-const MB = 1024 * 1024;
 
 const BlobParams = z.object({ hash: BlobHash });
 
@@ -35,7 +32,8 @@ async function ownerHasBlob(db: Executor, ownerId: string, hash: string) {
   return !!row;
 }
 
-type Registration = "registered" | "over-quota" | "gone";
+/** over-quota carries the owner's storage limit in bytes */
+type Registration = { status: "registered" | "gone" } | { status: "over-quota"; limit: number };
 
 /**
  * Registers a stored file with the project, unless it would put the owner over quota; a rejected
@@ -49,22 +47,23 @@ async function register(
   dir: string,
   projectId: string,
   blob: UploadedBlob,
-  storagePerUser: number,
+  quotas: Quotas,
 ): Promise<Registration> {
   return db.transaction(async (tx) => {
     await lockBlob(tx, blob.hash);
-    if (!(await blobExists(dir, blob.hash))) return "gone";
+    if (!(await blobExists(dir, blob.hash))) return { status: "gone" };
 
     const [project] = await tx
       .select({ ownerId: projects.ownerId })
       .from(projects)
       .where(eq(projects.id, projectId));
     if (project && !(await ownerHasBlob(tx, project.ownerId, blob.hash))) {
+      const { storagePerUser } = await quotasOf(tx, project.ownerId, quotas);
       const free = storagePerUser - (await storageUsedBy(tx, project.ownerId));
       if (blob.size > free) {
         if (!(await isReferenced(tx, blob.hash)))
           await rm(blobPath(dir, blob.hash), { force: true });
-        return "over-quota";
+        return { status: "over-quota", limit: storagePerUser };
       }
     }
 
@@ -75,14 +74,14 @@ async function register(
         target: [projectBlobs.projectId, projectBlobs.hash],
         set: { registeredAt: sql`now()` },
       });
-    return "registered";
+    return { status: "registered" };
   });
 }
 
 /** Uploaded files of a project: /api/projects/:id/blobs */
 export async function blobRoutes(
   app: FastifyInstance,
-  { db, dir, limits, storagePerUser }: BlobRoutesOptions,
+  { db, dir, limits, quotas }: BlobRoutesOptions,
 ) {
   app.addContentTypeParser("application/octet-stream", (_req, payload, done) =>
     done(null, payload),
@@ -110,12 +109,12 @@ export async function blobRoutes(
       throw err;
     }
 
-    const registration = await register(db, dir, access.projectId, blob, storagePerUser);
-    if (registration === "over-quota") {
-      const limit = Math.round(storagePerUser / MB);
+    const registration = await register(db, dir, access.projectId, blob, quotas);
+    if (registration.status === "over-quota") {
+      const limit = Math.round(registration.limit / MB);
       return reply.code(413).send({ error: `The project owner's storage is full (${limit} MB)` });
     }
-    if (registration === "gone") {
+    if (registration.status === "gone") {
       return reply.code(503).send({ error: "Upload interrupted, please try again" });
     }
     return blob;

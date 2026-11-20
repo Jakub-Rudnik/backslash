@@ -5,7 +5,9 @@ import Fastify, { type FastifyServerOptions } from "fastify";
 import { isTrustedOrigin, toHeaders } from "./lib/access.ts";
 import type { ProjectEvents } from "./lib/events.ts";
 import { rateLimit } from "./lib/rate-limit.ts";
+import type { Quotas } from "./lib/usage.ts";
 import { accountRoutes } from "./features/account/account.routes.ts";
+import { adminRoutes } from "./features/admin/admin.routes.ts";
 import { authRoutes } from "./features/auth/auth.routes.ts";
 import { blobRoutes } from "./features/blobs/blob.routes.ts";
 import type { CompileBackend } from "./features/compile/compile.backend.ts";
@@ -26,7 +28,8 @@ export type AppDeps = {
   trustedOrigins: string[];
   config: ServerConfig;
   rateLimits: RateLimitStore;
-  quotas: { projectsPerUser: number; storagePerUser: number };
+  /** defaults; an admin can set other limits per user */
+  quotas: Quotas;
   logger?: FastifyServerOptions["logger"];
   /** which proxies may set X-Forwarded-* (request scheme for origin checks) */
   trustProxy?: FastifyServerOptions["trustProxy"];
@@ -64,14 +67,15 @@ export function buildApp(deps: AppDeps) {
         db,
         events: deps.events,
         limits: deps.rateLimits,
-        maxProjectsPerUser: deps.quotas.projectsPerUser,
+        quotas: deps.quotas,
       });
       api.register(blobRoutes, {
         db,
         dir: deps.blobDir,
         limits: deps.rateLimits,
-        storagePerUser: deps.quotas.storagePerUser,
+        quotas: deps.quotas,
       });
+      api.register(adminRoutes, { db, events: deps.events, quotas: deps.quotas });
       api.register(compileRoutes, {
         db,
         backend: deps.compile,

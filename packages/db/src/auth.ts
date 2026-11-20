@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { eq } from "drizzle-orm";
 import type { Db } from "./client.ts";
 import { account, session, user, verification } from "./schema/auth.ts";
 
@@ -83,6 +84,25 @@ export function createAuth({
         },
         update: { before: async (user) => checkName(user.name) },
       },
+      session: {
+        create: {
+          before: async (session) => {
+            const [owner] = await db
+              .select({ banned: user.banned })
+              .from(user)
+              .where(eq(user.id, session.userId));
+            if (owner?.banned) {
+              throw new APIError("FORBIDDEN", { message: "This account has been suspended" });
+            }
+          },
+        },
+      },
+    },
+    user: {
+      additionalFields: {
+        role: { type: "string", required: false, input: false, defaultValue: "user" },
+        banned: { type: "boolean", required: false, input: false, defaultValue: false },
+      },
     },
     socialProviders: github ? { github } : {},
     trustedOrigins: (request) => {
@@ -113,10 +133,18 @@ export function createAuth({
 
 export type Auth = ReturnType<typeof createAuth>;
 
-export type SessionUser = { id: string; name: string; email: string; image?: string | null };
+export type SessionUser = {
+  id: string;
+  name: string;
+  email: string;
+  image?: string | null;
+  role: "user" | "admin";
+};
 
-/** Session from request headers (cookie), or null. */
+/** Session from request headers (cookie), or null; a banned user has none. */
 export async function getSessionUser(auth: Auth, headers: Headers): Promise<SessionUser | null> {
   const result = await auth.api.getSession({ headers });
-  return result?.user ?? null;
+  if (!result || result.user.banned) return null;
+  const { id, name, email, image } = result.user;
+  return { id, name, email, image, role: result.user.role === "admin" ? "admin" : "user" };
 }
