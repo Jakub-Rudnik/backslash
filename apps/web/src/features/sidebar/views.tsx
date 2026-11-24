@@ -3,24 +3,29 @@ import {
   FileAddIcon,
   Folder01Icon,
   FolderAddIcon,
+  LeftToRightListBulletIcon,
   Upload04Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
 import type { ReactNode, RefObject } from "react";
-import type { Peer } from "@/features/editor/use-collab";
+import type { CollabSession, Peer } from "@/features/editor/use-collab";
 import { FileTree, type FileTreeHandle } from "@/features/files/file-tree";
 import type { ProjectFiles } from "@/features/files/use-project-files";
 import type { useUpload } from "@/features/files/use-upload";
+import { OutlineView } from "@/features/outline/outline-view";
 import type { ViewId } from "@/features/sidebar/layout-settings";
 
 /** What the project page hands every sidebar view. */
 export interface ViewContext {
+  session: CollabSession | null;
   project: ProjectFiles;
   upload: ReturnType<typeof useUpload>;
   readOnly: boolean;
   activeId: string | null;
   peers: Peer[];
   openFile: (id: string) => void;
+  /** opens the file scrolled to `line` (1-based) */
+  openAt: (id: string, line: number) => void;
   downloadZip: () => void;
   fileTree: RefObject<FileTreeHandle | null>;
 }
@@ -97,6 +102,15 @@ export const VIEWS: SidebarView[] = [
         onOpen={ctx.openFile}
         className="min-h-0 flex-1"
       />
+    ),
+  },
+  {
+    id: "outline",
+    title: "Outline",
+    icon: LeftToRightListBulletIcon,
+    actions: () => [],
+    render: (ctx) => (
+      <OutlineView session={ctx.session} files={ctx.project.files} openAt={ctx.openAt} />
     ),
   },
 ];

@@ -6,7 +6,8 @@
     "dev": "vp dev",
     "build": "tsc -b && vp build",
     "lint": "vp lint",
-    "preview": "vp preview"
+    "preview": "vp preview",
+    "test": "vp test"
   },
   "dependencies": {
     "@backslash/shared": "workspace:*",

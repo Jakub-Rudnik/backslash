@@ -141,12 +141,14 @@ function ProjectEditor({
   }
 
   const viewContext: ViewContext = {
+    session,
     project,
     upload,
     readOnly,
     activeId,
     peers,
     openFile,
+    openAt,
     downloadZip,
     fileTree,
   };
@@ -155,11 +157,17 @@ function ProjectEditor({
   const fileForError = (e: CompileError) =>
     e.file ? project.files.find((f) => f.path === e.file) : undefined;
 
+  function openAt(id: string, line: number) {
+    open(id);
+    setReveal({ fileId: id, line, key: Date.now() });
+    sidebar.fileOpened();
+  }
+
   function jumpTo(e: CompileError) {
     const file = fileForError(e);
     if (!file) return;
-    open(file.id);
-    if (e.line) setReveal({ fileId: file.id, line: e.line, key: Date.now() });
+    if (e.line) openAt(file.id, e.line);
+    else open(file.id);
   }
 
   async function compile() {
