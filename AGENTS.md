@@ -1,82 +1,11 @@
 # backslash
 
-LaTeX editor in the browser: projects with multiple files, real-time collaboration, compiling to PDF, sharing with other accounts.
+Self-hosted LaTeX editor in the browser: real-time collaboration, compiling to PDF, sharing. Monorepo: `apps/web` (React SPA), `apps/api` (Fastify), `apps/collab` (Hocuspocus, Yjs), `apps/compiler` (BullMQ worker running `latexmk`), `packages/db` (Drizzle), `packages/shared`.
 
-## Architecture
+Run every package command through `vp` (Vite+, docs in `node_modules/vite-plus/docs`), never pnpm, npm or npx. `vpx <file>` runs a TS script. `vp <name>` is a built-in command and `vp run <name>` a `package.json` script; they can differ.
 
-pnpm monorepo, TypeScript everywhere. Postgres and Valkey run via `docker compose`.
+Give notes, plans and summaries in your reply; add a Markdown file only when asked.
 
-- `apps/web`: React SPA (React Router, TanStack Query, Base UI + shadcn, Tailwind, CodeMirror, pdf.js). Edits the Yjs doc through Hocuspocus.
-- `apps/api`: Fastify. Auth (Better Auth), projects, members, invites, file uploads, compile requests.
-- `apps/collab`: Hocuspocus server. One Yjs doc per project, persisted in Postgres.
-- `apps/compiler`: BullMQ worker that runs `latexmk` and returns the PDF and errors.
-- `packages/db`: Drizzle schema, migrations and client.
-- `packages/shared`: types, Zod schemas and Yjs doc helpers shared by the apps.
-
-## Structure
-
-- Group code by feature, not by kind. Files that change together live together.
-- `apps/web/src/features/<feature>`: components, hooks and helpers of one feature, flat in one folder. Shared code goes in `components/` (shadcn UI in `components/ui`), `hooks/` and `lib/`. `pages/` only holds routed pages.
-- `apps/api/src/features/<feature>`: routes, service and storage of one feature. Shared code goes in `src/lib`.
-- `apps/collab` and `apps/compiler` are small single-purpose services and stay flat.
-- No `index.ts` barrel files, no fixed set of subfolders per feature. Create a new feature folder only when the code doesn't belong to an existing one.
-
-## Local setup
-
-- Requirements: Node, Docker, TeX Live with `latexmk`, and bubblewrap (`bwrap`, Linux) for the compile sandbox.
-- `docker compose up -d` starts Postgres, Valkey and Mailpit (inbox for password reset mails at http://localhost:8025).
-- Copy `.env.example` to `.env` in `apps/api`, `apps/collab` and `apps/compiler`. `BETTER_AUTH_SECRET` and `INTERNAL_SECRET` must be the same in `api` and `collab` (`openssl rand -base64 32`). Migrations run on startup.
-- API tests use a separate database: `docker compose exec postgres psql -U backslash -c "create database backslash_test"`.
-
-## Toolchain
-
-The toolchain is Vite+, run through the global `vp` CLI. Docs are in `node_modules/vite-plus/docs`.
-
-- `vp install` installs dependencies. Do not call pnpm, npm or npx directly.
-- `vp check` formats, lints and type checks; `vp check --fix` fixes what it can.
-- `vp run -r test` runs all tests. `vp run ready` runs check, tests and build.
-- `vp run dev` starts every app.
-- `vpx <file>` runs a TS script. Do not add tsx or ts-node.
-- `vp <name>` is a built-in command and `vp run <name>` is a `package.json` script. They can differ.
-- Import Vite and Vitest APIs from `vite-plus`; lint enforces this.
-
-A pre-commit hook runs `vp check --fix` on staged files. Before you finish a change, run `vp check` and the tests of the apps you touched.
-
-## Code
-
-- Keep it simple. Solve the problem at hand without speculative abstractions, extra layers, unused options or generic helpers made for a single use. A few repeated lines are better than the wrong abstraction.
-- Code should explain itself through names and structure.
-- Follow the patterns already used in the app you are changing.
-- No `as` type assertions (`as const` is fine): validate unknown data with Zod or narrow it with `instanceof`. Declare interfaces and `extends` instead of `Pick`/`Omit`. Lint enforces both.
-
-## Tests
-
-- Unit tests only for logic that can realistically break: access control, concurrency, parsing, sandboxing, non-trivial data transformations. No tests for trivial functions, plain wiring or what a library already guarantees.
-- Prefer a few tests that cover a whole behavior over many small ones per function.
-- UI flows that matter (sign in, projects, editing, uploads, compiling, sharing) are covered by end-to-end tests. When you change one of them, update or add its e2e test.
-
-## UI changes
-
-After changing UI, run `vp run dev` and check the changed screens in a real browser: use the browser built into your environment, or the Playwright MCP server from `.mcp.json`. Check light and dark theme, a narrow (mobile) width, empty, loading and error states, and that the console has no errors. A passing `vp check` does not mean the UI works.
-
-## Git and versions
-
-- Every feature or fix goes on its own branch off `main` (`feat/<name>`, `fix/<name>`, `chore/<name>`) and is merged through a pull request. Do not commit features straight to `main`.
-- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org): `type(scope): summary`, e.g. `feat(web): ...`, `fix(api): ...`. Types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`, `ci`. Mark breaking changes with `!` (`feat(api)!: ...`).
-- The project has one version, in the root `package.json`, following [SemVer](https://semver.org). The apps and packages have none. While in alpha (`0.x`), a branch with a `feat` or a breaking change bumps the minor version (`0.1.0` → `0.2.0`), and a branch with only fixes bumps the patch version (`0.1.0` → `0.1.1`). Other changes (`docs`, `chore`, `refactor` and so on) do not bump it.
-- No git tags or GitHub releases for now.
-
-## Formatting
-
-Formatting is defined in the `fmt` block of the root `vite.config.ts`: 2-space indent, no tabs, double quotes, semicolons, trailing commas, LF, 100 columns. Do not add other formatter configs, and run `vp check --fix` instead of formatting by hand.
-
-## Comments
-
-- Do not write comments that explain what the code does or narrate its steps.
-- No line or inline comments, TODO/FIXME notes or commented-out code.
-- JSDoc (`/** ... */`) is allowed above a function, method or class only when it adds something the name and signature don't already say. Most functions need none.
-- Allowed: short section headers that visually split a file (`/* Linting */` in tsconfig, `// --- members ---` in a long routes file) and tool directives (`// oxlint-disable-next-line`, `// @ts-expect-error`).
-
-## Files
-
-Do not create new Markdown files (notes, plans, summaries, docs) unless explicitly asked. Existing ones (`README.md`, `AGENTS.md`) may be edited.
+- **Code**: read [`CODING_STANDARDS.md`](CODING_STANDARDS.md) before writing, reviewing or testing code. It defines when a change is done.
+- **Setup**: when a service, `.env` file or the test database is missing, follow [Development in `README.md`](README.md#development).
+- **Git**: read [`CONTRIBUTING.md`](CONTRIBUTING.md) before branching, committing, opening a pull request or bumping the version.
