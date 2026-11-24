@@ -26,7 +26,7 @@ import { useSidebar } from "@/features/sidebar/use-sidebar";
 import {
   actionsFor,
   viewById,
-  VIEWS,
+  viewsFor,
   type SidebarView,
   type ViewContext,
 } from "@/features/sidebar/views";
@@ -42,6 +42,7 @@ import { useProjectFiles } from "@/features/files/use-project-files";
 import { useSharedBuild } from "@/features/compile/use-shared-build";
 import { useUpload } from "@/features/files/use-upload";
 import { useTheme } from "@/hooks/use-theme";
+import { mod, useShortcut } from "@/hooks/use-shortcut";
 import { api, ApiError, pdfUrl } from "@/lib/api";
 import { downloadProjectZip } from "@/features/files/zip-export";
 
@@ -120,7 +121,7 @@ function ProjectEditor({
   const [reveal, setReveal] = useState<(Reveal & { fileId: string }) | null>(null);
   const [syncError, setSyncError] = useState<Error | null>(null);
   const mainFile = project.files.find((f) => f.id === project.mainId) ?? null;
-  const upload = useUpload(projectId, project, (id) => open(id));
+  const upload = useUpload(projectId, project, (id) => openFile(id));
 
   const fileBase = name.replace(/[^\w.-]+/g, "-") || "project";
   const [zoomStep, setZoomStep] = useState(DEFAULT_ZOOM_STEP);
@@ -167,6 +168,7 @@ function ProjectEditor({
     project,
     upload,
     readOnly,
+    synced,
     activeId,
     peers,
     openFile,
@@ -176,7 +178,8 @@ function ProjectEditor({
     downloadZip,
     fileTree,
   };
-  const sidebarView = viewById(sidebar.view);
+  const views = viewsFor(readOnly);
+  const sidebarView = viewById(sidebar.view, readOnly);
 
   const fileForError = (e: CompileError) =>
     e.file ? project.files.find((f) => f.path === e.file) : undefined;
@@ -191,11 +194,12 @@ function ProjectEditor({
     const file = fileForError(e);
     if (!file) return;
     if (e.line) openAt(file.id, e.line);
-    else open(file.id);
+    else openFile(file.id);
   }
 
   async function compile() {
     if (!session || !synced || !mainFile) return;
+    setErrorsOpen(false);
     const ready = readOnly || (await waitForSync(session.provider));
     setSyncError(
       ready ? null : new Error("Your latest edits haven't reached the server, try again"),
@@ -212,17 +216,10 @@ function ProjectEditor({
     if (synced && !pdfIsFresh()) void compileNow();
   }, [synced]);
 
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      if (e.key !== "s" && e.key !== "Enter") return;
-      e.preventDefault();
-      e.stopPropagation();
-      void compileNow();
-    }
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, []);
+  useShortcut(
+    (e) => mod(e) && (e.key === "s" || e.key === "Enter"),
+    () => void compile(),
+  );
 
   const errors = build.latest?.errors ?? [];
   /** Built when the palette opens, so titles like "Hide sidebar" match the layout then. */
@@ -244,13 +241,13 @@ function ProjectEditor({
         keys: "Ctrl+Shift+B",
         run: () => sidebar.setOpen(!sidebar.open),
       },
-      ...VIEWS.map((v) => ({
+      ...views.map((v) => ({
         id: `show:${v.id}`,
         title: `Show ${v.title}`,
         takesFocus: v.id === "search",
         run: () => sidebar.show(v.id),
       })),
-      ...VIEWS.flatMap(viewCommands),
+      ...views.flatMap(viewCommands),
       ...(sidebar.phone
         ? [
             { id: "show-code", title: "Show code", run: () => sidebar.setPhoneTab("code") },
@@ -487,12 +484,31 @@ function ProjectEditor({
         </>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <ActivityBar view={sidebar.view} open={sidebar.open} onSelect={sidebar.select} />
+          <ActivityBar
+            views={views}
+            view={sidebar.view}
+            open={sidebar.open}
+            onSelect={sidebar.select}
+          />
           {!sidebar.docked && (
-            <Sheet open={sidebar.open} onOpenChange={sidebar.setOpen}>
+            <Sheet
+              open={sidebar.open}
+              modal="trap-focus"
+              onOpenChange={(open, details) => {
+                // the activity bar's own click toggles or switches the view
+                if (
+                  details.event.target instanceof Element &&
+                  details.event.target.closest("#activity-bar")
+                ) {
+                  return details.cancel();
+                }
+                sidebar.setOpen(open);
+              }}
+            >
               <SheetContent
                 side="left"
                 showCloseButton={false}
+                overlayClassName="top-12 left-11"
                 className="bg-sidebar data-[side=left]:top-12 data-[side=left]:left-11 data-[side=left]:h-auto data-[side=left]:w-72"
               >
                 <SheetTitle className="sr-only">{sidebarView.title}</SheetTitle>

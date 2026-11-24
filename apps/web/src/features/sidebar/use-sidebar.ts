@@ -1,6 +1,7 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { LayoutChangedMeta, PanelImperativeHandle } from "react-resizable-panels";
 import { LG, MD, useMediaQuery } from "@/hooks/use-media-query";
+import { mod, useShortcut } from "@/hooks/use-shortcut";
 import { useLayoutSettings, type ViewId } from "@/features/sidebar/layout-settings";
 
 export type PhoneTab = "view" | "code" | "pdf";
@@ -8,7 +9,7 @@ export type PhoneTab = "view" | "code" | "pdf";
 /**
  * Sidebar state: from `lg` up a docked, resizable panel remembered across projects; from `md` an
  * overlay that starts closed and closes once a file is opened; below `md` (phones) one pane at a
- * time, where the sidebar is the first tab. `Ctrl+Shift+B` toggles any of them.
+ * time, where the sidebar is the first tab. `Ctrl+Shift+B` (or `Ctrl+\\`) toggles any of them.
  */
 export function useSidebar() {
   const docked = useMediaQuery(LG);
@@ -51,18 +52,10 @@ export function useSidebar() {
     else update({ sidebarOpen: true, sidebarWidth: Math.round(panel.getSize().inPixels) });
   }
 
-  const toggle = useEffectEvent(() => setOpen(!open));
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey) return;
-      if (e.key.toLowerCase() !== "b") return;
-      e.preventDefault();
-      e.stopPropagation();
-      toggle();
-    }
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, []);
+  useShortcut(
+    (e) => mod(e) && !e.altKey && ((e.shiftKey && e.key.toLowerCase() === "b") || e.key === "\\"),
+    () => setOpen(!open),
+  );
 
   return {
     docked,
@@ -78,10 +71,11 @@ export function useSidebar() {
     show,
     setOpen,
     onLayoutChanged,
-    /** after a file is opened, the overlay gets out of the way and phones show the code */
+    /** after a file is opened, the overlay gets out of the way and the code shows */
     fileOpened: () => {
       setOverlayOpen(false);
       setPhoneTab("code");
+      if (!settings.showCode) update({ showCode: true });
     },
   };
 }

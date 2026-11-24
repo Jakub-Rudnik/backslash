@@ -2,24 +2,27 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import type { ViewId } from "@/features/sidebar/layout-settings";
-import { actionsFor, VIEWS, type SidebarView, type ViewContext } from "@/features/sidebar/views";
+import { actionsFor, viewsFor, type SidebarView, type ViewContext } from "@/features/sidebar/views";
 
 /** The column of view icons; the active one is marked only while its panel is open. */
 export function ActivityBar({
+  views,
   view,
   open,
   onSelect,
 }: {
+  views: SidebarView[];
   view: ViewId;
   open: boolean;
   onSelect: (id: ViewId) => void;
 }) {
   return (
     <nav
+      id="activity-bar"
       aria-label="Sidebar views"
       className="flex w-11 shrink-0 flex-col items-center gap-1 border-r bg-sidebar py-1.5 text-sidebar-foreground"
     >
-      {VIEWS.map((v) => {
+      {views.map((v) => {
         const active = open && v.id === view;
         return (
           <button
@@ -67,7 +70,7 @@ export function SidebarPanel({
             aria-label="Sidebar views"
             className="mr-auto flex rounded-full bg-sidebar-accent p-0.5"
           >
-            {VIEWS.map((v) => (
+            {viewsFor(ctx.readOnly).map((v) => (
               <button
                 key={v.id}
                 type="button"

@@ -87,8 +87,10 @@ function CopyLink({ url }: { url: string }) {
   );
 }
 
-/** Members, roles and invite links of a project. Only the owner can change anything. */
-/** Members and invites; `open` is controlled so the command palette can open it too. */
+/**
+ * Members, roles and invite links of a project. Only the owner can change anything. `open` is
+ * controlled so the command palette can open it too.
+ */
 export function ShareDialog({
   projectId,
   role,

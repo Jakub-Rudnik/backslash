@@ -1,10 +1,11 @@
 import type { DocFile } from "@backslash/shared/doc";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "cn";
-import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { CollabSession } from "@/features/editor/use-collab";
 import { useOutline } from "@/features/outline/use-outline";
+import { mod, useShortcut } from "@/hooks/use-shortcut";
 import {
   filterPalette,
   parsePaletteInput,
@@ -78,22 +79,13 @@ function PaletteBody({
       run: c.run,
     }));
   } else if (mode === "headings") {
-    const idOf = new Map(files.map((f) => [f.path, f.id]));
-    const top = Math.min(...outline.headings.map((h) => h.level));
-    items = filterPalette(outline.headings, query, (h) => h.title).flatMap((h) => {
-      const id = idOf.get(h.path);
-      return id
-        ? [
-            {
-              key: `${h.path}:${h.line}`,
-              label: h.title,
-              detail: `${h.path}:${h.line}`,
-              indent: query ? 0 : h.level - top,
-              run: () => openAt(id, h.line),
-            },
-          ]
-        : [];
-    });
+    items = filterPalette(outline.headings, query, (h) => h.title).map((h, i) => ({
+      key: `${h.fileId}:${i}`,
+      label: h.title,
+      detail: `${h.path}:${h.line}`,
+      indent: query ? 0 : h.depth,
+      run: () => openAt(h.fileId, h.line),
+    }));
   } else {
     items = filterPalette(files, query, (f) => f.path).map((f) => ({
       key: f.id,
@@ -189,24 +181,17 @@ export function CommandPalette({ commands: getCommands, ...props }: PaletteProps
   const [input, setInput] = useState("");
   const [commands, setCommands] = useState<PaletteCommand[]>([]);
   const restoreFocus = useRef(true);
-  const show = useEffectEvent((initial: string) => {
+  function show(initial: string) {
     restoreFocus.current = true;
     setCommands(getCommands());
     setInput(initial);
     setOpen(true);
-  });
+  }
 
-  useEffect(() => {
-    function onKeyDown(e: globalThis.KeyboardEvent) {
-      const ctrlP = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key === "p";
-      if (!ctrlP && e.key !== "F1") return;
-      e.preventDefault();
-      e.stopPropagation();
-      show(e.key === "F1" ? ">" : "");
-    }
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, []);
+  useShortcut(
+    (e) => (mod(e) && !e.shiftKey && !e.altKey && e.key === "p") || e.key === "F1",
+    (e) => show(e.key === "F1" ? ">" : ""),
+  );
 
   function choose(item: Item) {
     restoreFocus.current = !item.takesFocus;

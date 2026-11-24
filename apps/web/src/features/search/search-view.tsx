@@ -1,10 +1,9 @@
-import { filesMap, listFiles } from "@backslash/shared/doc";
-import { useEffect, useState } from "react";
+import { listFiles } from "@backslash/shared/doc";
 import { Input } from "@/components/ui/input";
 import type { CollabSession } from "@/features/editor/use-collab";
+import { useDocValue } from "@/features/editor/use-doc-value";
 import { MAX_MATCHES, searchFiles, type SearchMatch } from "@/features/search/search";
 
-const UPDATE_DELAY_MS = 150;
 const CONTEXT_CHARS = 24;
 
 type Results = ReturnType<typeof searchFiles>;
@@ -16,28 +15,7 @@ function search(session: CollabSession, query: string): Results {
   return searchFiles(files, query);
 }
 
-/** Results for `query`, kept up to date with everyone's edits. */
-function useSearch(session: CollabSession | null, query: string): Results {
-  const [results, setResults] = useState<Results>({ files: [], truncated: false });
-
-  useEffect(() => {
-    if (!session) return;
-    const run = () => setResults(search(session, query));
-    let timer = setTimeout(run, UPDATE_DELAY_MS);
-    const update = () => {
-      clearTimeout(timer);
-      timer = setTimeout(run, UPDATE_DELAY_MS);
-    };
-    const files = filesMap(session.doc);
-    files.observeDeep(update);
-    return () => {
-      clearTimeout(timer);
-      files.unobserveDeep(update);
-    };
-  }, [session, query]);
-
-  return results;
-}
+const NO_RESULTS: Results = { files: [], truncated: false };
 
 function MatchText({ match }: { match: SearchMatch }) {
   const start = Math.max(0, match.from - CONTEXT_CHARS);
@@ -65,7 +43,7 @@ export function SearchView({
   onQueryChange: (query: string) => void;
   openAt: (fileId: string, line: number) => void;
 }) {
-  const results = useSearch(session, query);
+  const results = useDocValue(session, (s) => search(s, query), NO_RESULTS, query);
   const count = results.files.reduce((n, f) => n + f.matches.length, 0);
 
   return (
