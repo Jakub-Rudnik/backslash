@@ -88,12 +88,22 @@ function CopyLink({ url }: { url: string }) {
 }
 
 /** Members, roles and invite links of a project. Only the owner can change anything. */
-export function ShareDialog({ projectId, role }: { projectId: string; role: ProjectRole }) {
+/** Members and invites; `open` is controlled so the command palette can open it too. */
+export function ShareDialog({
+  projectId,
+  role,
+  open,
+  onOpenChange: setOpen,
+}: {
+  projectId: string;
+  role: ProjectRole;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const account = useAccount();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isOwner = role === "owner";
-  const [open, setOpen] = useState(false);
   const [inviteRole, setInviteRole] = useState<GrantableRole>("editor");
   const [created, setCreated] = useState<string | null>(null);
 

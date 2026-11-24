@@ -24,11 +24,15 @@ export function useSidebar() {
     panel.resize(settings.sidebarWidth);
   }
 
-  /** Clicking the open view's icon closes the panel; any other icon opens that view. */
-  function select(view: ViewId) {
-    if (open && view === settings.view) return setOpen(false);
+  function show(view: ViewId) {
     update({ view });
     if (!open) setOpen(true);
+  }
+
+  /** Clicking the open view's icon closes the panel; any other icon opens that view. */
+  function select(view: ViewId) {
+    if (open && view === settings.view) setOpen(false);
+    else show(view);
   }
 
   /** Remembers the width, and dragging the panel narrow enough to collapse it. */
@@ -60,6 +64,7 @@ export function useSidebar() {
     initialSize: settings.sidebarOpen ? settings.sidebarWidth : 0,
     panelRef,
     select,
+    show,
     setOpen,
     onLayoutChanged,
     /** after a file is opened, the overlay gets out of the way */

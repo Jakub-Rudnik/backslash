@@ -1,5 +1,4 @@
 import type { CompileError } from "@backslash/shared";
-import { useState } from "react";
 import { Alert02Icon, ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -8,6 +7,9 @@ type CompileErrorsProps = {
   /** false if the error's file no longer exists */
   canJump: (error: CompileError) => boolean;
   onJump: (error: CompileError) => void;
+  /** the full list is shown, not just the first error */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
 function location({ file, line }: CompileError) {
@@ -18,8 +20,13 @@ function location({ file, line }: CompileError) {
 }
 
 /** Strip under the PDF toolbar: the first error, expandable to all of them. */
-export function CompileErrors({ errors, canJump, onJump }: CompileErrorsProps) {
-  const [open, setOpen] = useState(false);
+export function CompileErrors({
+  errors,
+  canJump,
+  onJump,
+  open,
+  onOpenChange: setOpen,
+}: CompileErrorsProps) {
   const [first] = errors;
   if (!first) return null;
 

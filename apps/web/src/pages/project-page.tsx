@@ -1,6 +1,7 @@
 import type { CompileError, ProjectRole } from "@backslash/shared";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Download04Icon, MinusSignIcon, PlayIcon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
@@ -22,7 +23,16 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ActivityBar, SidebarPanel } from "@/features/sidebar/sidebar";
 import { useSidebar } from "@/features/sidebar/use-sidebar";
-import { viewById, type ViewContext } from "@/features/sidebar/views";
+import {
+  actionsFor,
+  viewById,
+  VIEWS,
+  type SidebarView,
+  type ViewContext,
+} from "@/features/sidebar/views";
+import { useLayoutSettings } from "@/features/sidebar/layout-settings";
+import { LayoutToggles } from "@/features/sidebar/layout-toggles";
+import { CommandPalette, type PaletteCommand } from "@/features/palette/command-palette";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useActiveFile } from "@/features/editor/use-active-file";
 import { useCollab } from "@/features/editor/use-collab";
@@ -122,8 +132,18 @@ function ProjectEditor({
   }
   const { theme } = useTheme();
   const sidebar = useSidebar();
-  const fileTree = useRef<FileTreeHandle>(null);
+  const fileTreeRef = useRef<FileTreeHandle>(null);
+  const fileTree = {
+    ref: (handle: FileTreeHandle | null) => {
+      fileTreeRef.current = handle;
+    },
+    startCreate: (kind: "create" | "create-folder") => fileTreeRef.current?.startCreate(kind),
+    pickFiles: () => fileTreeRef.current?.pickFiles(),
+  };
   const [searchQuery, setSearchQuery] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [errorsOpen, setErrorsOpen] = useState(false);
+  const { settings: layout, update: updateLayout } = useLayoutSettings();
 
   const { run, isPending, error } = useCompile(projectId, build.latest);
   useEffect(() => {
@@ -162,7 +182,7 @@ function ProjectEditor({
 
   function openAt(id: string, line: number) {
     open(id);
-    setReveal({ fileId: id, line, key: Date.now() });
+    setReveal((prev) => ({ fileId: id, line, key: (prev?.key ?? 0) + 1 }));
     sidebar.fileOpened();
   }
 
@@ -202,6 +222,64 @@ function ProjectEditor({
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
+
+  const errors = build.latest?.errors ?? [];
+  /** Built when the palette opens, so titles like "Hide sidebar" match the layout then. */
+  function paletteCommands(): PaletteCommand[] {
+    const viewCommands = (view: SidebarView) =>
+      actionsFor(view, viewContext).map((a) => ({
+        id: `${view.id}:${a.id}`,
+        title: a.title,
+        takesFocus: true,
+        run: () => {
+          flushSync(() => sidebar.show(view.id));
+          a.run();
+        },
+      }));
+    return [
+      {
+        id: "toggle-sidebar",
+        title: sidebar.open ? "Hide sidebar" : "Show sidebar",
+        keys: "Ctrl+Shift+B",
+        run: () => sidebar.setOpen(!sidebar.open),
+      },
+      ...VIEWS.map((v) => ({
+        id: `show:${v.id}`,
+        title: `Show ${v.title}`,
+        takesFocus: v.id === "search",
+        run: () => sidebar.show(v.id),
+      })),
+      ...VIEWS.flatMap(viewCommands),
+      {
+        id: "toggle-code",
+        title: layout.showCode ? "Hide code" : "Show code",
+        run: () =>
+          updateLayout(layout.showCode ? { showCode: false, showPdf: true } : { showCode: true }),
+      },
+      {
+        id: "toggle-pdf",
+        title: layout.showPdf ? "Hide PDF" : "Show PDF",
+        run: () =>
+          updateLayout(layout.showPdf ? { showPdf: false, showCode: true } : { showPdf: true }),
+      },
+      ...(mainFile
+        ? [{ id: "compile", title: "Compile", keys: "Ctrl+S", run: () => void compile() }]
+        : []),
+      ...(errors.length > 0
+        ? [
+            {
+              id: "compile-errors",
+              title: "Show compile errors",
+              run: () => {
+                updateLayout({ showPdf: true });
+                setErrorsOpen(true);
+              },
+            },
+          ]
+        : []),
+      { id: "share", title: "Share", takesFocus: true, run: () => setShareOpen(true) },
+    ];
+  }
 
   const compiling = [
     ...(isPending ? ["You"] : []),
@@ -248,6 +326,99 @@ function ProjectEditor({
     );
   }
 
+  const codePane = (
+    <>
+      <div className="flex h-10 shrink-0 items-center border-b px-3 text-xs text-muted-foreground">
+        <span className="truncate font-mono">{active?.path}</span>
+      </div>
+      <div className="min-h-0 flex-1">{editorPanel}</div>
+    </>
+  );
+
+  const pdfPane = (
+    <>
+      <div className="flex h-10 shrink-0 items-center gap-3 border-b px-2 text-sm">
+        <Button
+          size="sm"
+          className="h-7"
+          onClick={() => void compile()}
+          disabled={isPending || !synced || !mainFile}
+          title={synced && !mainFile ? "Add a .tex file to compile" : undefined}
+        >
+          <HugeiconsIcon icon={PlayIcon} data-icon="inline-start" />
+          Recompile
+        </Button>
+        <CompileStatus
+          compiling={compiling}
+          build={build.latest}
+          error={isPending ? null : (syncError ?? error)}
+          myName={me.name}
+        />
+        <div className="ml-auto flex shrink-0 items-center text-xs text-muted-foreground">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Zoom out"
+            disabled={zoomStep === 0}
+            onClick={() => setZoomStep(zoomStep - 1)}
+          >
+            <HugeiconsIcon icon={MinusSignIcon} />
+          </Button>
+          <button
+            type="button"
+            title="Reset zoom"
+            onClick={() => setZoomStep(DEFAULT_ZOOM_STEP)}
+            className="w-10 cursor-pointer text-center tabular-nums"
+          >
+            {Math.round(ZOOM_STEPS[zoomStep] * 100)}%
+          </button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Zoom in"
+            disabled={zoomStep === ZOOM_STEPS.length - 1}
+            onClick={() => setZoomStep(zoomStep + 1)}
+          >
+            <HugeiconsIcon icon={PlusSignIcon} />
+          </Button>
+          {pdf ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Download PDF"
+              title="Download PDF"
+              nativeButton={false}
+              render={<a href={pdf} download={`${fileBase}.pdf`} />}
+            >
+              <HugeiconsIcon icon={Download04Icon} />
+            </Button>
+          ) : (
+            <Button variant="ghost" size="icon-sm" aria-label="Download PDF" disabled>
+              <HugeiconsIcon icon={Download04Icon} />
+            </Button>
+          )}
+        </div>
+      </div>
+      {!isPending && (
+        <CompileErrors
+          errors={errors}
+          canJump={(e) => !!fileForError(e)}
+          onJump={jumpTo}
+          open={errorsOpen}
+          onOpenChange={setErrorsOpen}
+        />
+      )}
+      <PdfViewer
+        url={pdf}
+        zoom={ZOOM_STEPS[zoomStep]}
+        className={cn(
+          "min-h-0 flex-1 overflow-auto bg-muted p-4 transition-opacity",
+          build.latest?.status === "error" && "opacity-50",
+        )}
+      />
+    </>
+  );
+
   return (
     <div className="flex h-screen flex-col">
       <AppHeader>
@@ -267,9 +438,22 @@ function ProjectEditor({
         </span>
         {readOnly && <Badge variant="secondary">Read-only</Badge>}
         <div className="flex-1" />
+        <LayoutToggles />
         <CollabStatus status={status} me={me} peers={peers} />
-        <ShareDialog projectId={projectId} role={role} />
+        <ShareDialog
+          projectId={projectId}
+          role={role}
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+        />
       </AppHeader>
+      <CommandPalette
+        session={session}
+        files={project.files}
+        commands={paletteCommands}
+        openFile={openFile}
+        openAt={openAt}
+      />
       <div className="flex min-h-0 flex-1">
         <ActivityBar view={sidebar.view} open={sidebar.open} onSelect={sidebar.select} />
         {!sidebar.docked && (
@@ -304,92 +488,17 @@ function ProjectEditor({
               <ResizableHandle />
             </>
           )}
-          <ResizablePanel id="editor" className="flex flex-col">
-            <div className="flex h-10 shrink-0 items-center border-b px-3 text-xs text-muted-foreground">
-              <span className="truncate font-mono">{active?.path}</span>
-            </div>
-            <div className="min-h-0 flex-1">{editorPanel}</div>
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel id="pdf" className="flex flex-col">
-            <div className="flex h-10 shrink-0 items-center gap-3 border-b px-2 text-sm">
-              <Button
-                size="sm"
-                className="h-7"
-                onClick={() => void compile()}
-                disabled={isPending || !synced || !mainFile}
-                title={synced && !mainFile ? "Add a .tex file to compile" : undefined}
-              >
-                <HugeiconsIcon icon={PlayIcon} data-icon="inline-start" />
-                Recompile
-              </Button>
-              <CompileStatus
-                compiling={compiling}
-                build={build.latest}
-                error={isPending ? null : (syncError ?? error)}
-                myName={me.name}
-              />
-              <div className="ml-auto flex shrink-0 items-center text-xs text-muted-foreground">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Zoom out"
-                  disabled={zoomStep === 0}
-                  onClick={() => setZoomStep(zoomStep - 1)}
-                >
-                  <HugeiconsIcon icon={MinusSignIcon} />
-                </Button>
-                <button
-                  type="button"
-                  title="Reset zoom"
-                  onClick={() => setZoomStep(DEFAULT_ZOOM_STEP)}
-                  className="w-10 cursor-pointer text-center tabular-nums"
-                >
-                  {Math.round(ZOOM_STEPS[zoomStep] * 100)}%
-                </button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Zoom in"
-                  disabled={zoomStep === ZOOM_STEPS.length - 1}
-                  onClick={() => setZoomStep(zoomStep + 1)}
-                >
-                  <HugeiconsIcon icon={PlusSignIcon} />
-                </Button>
-                {pdf ? (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Download PDF"
-                    title="Download PDF"
-                    nativeButton={false}
-                    render={<a href={pdf} download={`${fileBase}.pdf`} />}
-                  >
-                    <HugeiconsIcon icon={Download04Icon} />
-                  </Button>
-                ) : (
-                  <Button variant="ghost" size="icon-sm" aria-label="Download PDF" disabled>
-                    <HugeiconsIcon icon={Download04Icon} />
-                  </Button>
-                )}
-              </div>
-            </div>
-            {!isPending && (
-              <CompileErrors
-                errors={build.latest?.errors ?? []}
-                canJump={(e) => !!fileForError(e)}
-                onJump={jumpTo}
-              />
-            )}
-            <PdfViewer
-              url={pdf}
-              zoom={ZOOM_STEPS[zoomStep]}
-              className={cn(
-                "min-h-0 flex-1 overflow-auto bg-muted p-4 transition-opacity",
-                build.latest?.status === "error" && "opacity-50",
-              )}
-            />
-          </ResizablePanel>
+          {layout.showCode && (
+            <ResizablePanel id="code" className="flex flex-col">
+              {codePane}
+            </ResizablePanel>
+          )}
+          {layout.showCode && layout.showPdf && <ResizableHandle withHandle />}
+          {layout.showPdf && (
+            <ResizablePanel id="pdf" className="flex flex-col">
+              {pdfPane}
+            </ResizablePanel>
+          )}
         </ResizablePanelGroup>
       </div>
     </div>
