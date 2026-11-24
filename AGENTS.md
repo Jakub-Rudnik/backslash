@@ -9,3 +9,17 @@ Give notes, plans and summaries in your reply; add a Markdown file only when ask
 - **Code**: read [`CODING_STANDARDS.md`](CODING_STANDARDS.md) before writing, reviewing or testing code. It defines when a change is done.
 - **Setup**: when a service, `.env` file or the test database is missing, follow [Development in `README.md`](README.md#development).
 - **Git**: read [`CONTRIBUTING.md`](CONTRIBUTING.md) before branching, committing, opening a pull request or bumping the version.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues (`Jakub-Rudnik/backslash`) via `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
