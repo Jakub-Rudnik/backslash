@@ -31,7 +31,7 @@ export function OutlineView({
             type="button"
             onClick={() => openAt(h.fileId, h.line)}
             title={`${h.path}:${h.line}`}
-            className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-md pr-2 text-left hover:bg-sidebar-accent"
+            className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-md pr-2 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
             style={{ paddingLeft: 8 + h.depth * 14 }}
           >
             <span className={h.depth === 0 ? "truncate font-medium" : "truncate"}>{h.title}</span>

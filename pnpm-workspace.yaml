@@ -54,6 +54,7 @@ catalog:
   zod: ^4.6.7
   nodemailer: ^10.6.0
   "@types/nodemailer": ^8.0.2
+  cmdk: ^1.1.1
 overrides:
   vite@*: "catalog:"
 peerDependencyRules:

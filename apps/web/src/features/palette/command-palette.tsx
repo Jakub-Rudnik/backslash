@@ -1,7 +1,15 @@
 import type { DocFile } from "@backslash/shared/doc";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "cn";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useRef, useState } from "react";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandShortcut,
+} from "@/components/ui/command";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { CollabSession } from "@/features/editor/use-collab";
 import { useOutline } from "@/features/outline/use-outline";
@@ -66,8 +74,6 @@ function PaletteBody({
 }) {
   const { mode, query } = parsePaletteInput(input);
   const outline = useOutline(mode === "headings" ? session : null);
-  const [active, setActive] = useState(0);
-  const list = useRef<HTMLUListElement>(null);
 
   let items: Item[];
   if (mode === "commands") {
@@ -94,22 +100,6 @@ function PaletteBody({
     }));
   }
   items = items.slice(0, MAX_ITEMS);
-  const current = Math.min(active, items.length - 1);
-
-  useEffect(() => {
-    list.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
-  }, [current]);
-
-  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      const step = e.key === "ArrowDown" ? 1 : -1;
-      setActive((current + step + items.length) % Math.max(items.length, 1));
-    } else if (e.key === "Enter" && items[current]) {
-      e.preventDefault();
-      choose(items[current]);
-    }
-  }
 
   let empty = "No matching files";
   if (mode === "commands") empty = "No matching commands";
@@ -118,55 +108,36 @@ function PaletteBody({
   }
 
   return (
-    <>
+    <Command shouldFilter={false} loop className="rounded-none bg-transparent p-1.5">
       <DialogPrimitive.Title className="sr-only">Command palette</DialogPrimitive.Title>
-      <input
+      <CommandInput
         autoFocus
         value={input}
-        onChange={(e) => {
-          setInput(e.target.value);
-          setActive(0);
-        }}
-        onKeyDown={onKeyDown}
+        onValueChange={setInput}
         placeholder={PLACEHOLDERS[mode]}
         aria-label={PLACEHOLDERS[mode]}
-        role="combobox"
-        aria-expanded
-        aria-controls="palette-items"
-        aria-activedescendant={items[current] ? `palette-${current}` : undefined}
-        className="h-12 w-full border-b bg-transparent px-4 text-sm outline-none placeholder:text-muted-foreground"
       />
-      <ul ref={list} id="palette-items" role="listbox" className="max-h-80 overflow-y-auto p-1.5">
-        {items.length === 0 && (
-          <li className="px-3 py-6 text-center text-sm text-muted-foreground">{empty}</li>
-        )}
-        {items.map((item, i) => (
-          <li
+      <CommandList className="max-h-80 pt-1.5">
+        <CommandEmpty className="text-muted-foreground">{empty}</CommandEmpty>
+        {items.map((item) => (
+          <CommandItem
             key={item.key}
-            id={`palette-${i}`}
-            role="option"
-            aria-selected={i === current}
-            data-active={i === current}
-            onMouseMove={() => i !== current && setActive(i)}
-            onClick={() => choose(item)}
-            className={cn(
-              "flex h-9 cursor-pointer items-center gap-3 rounded-xl px-3 text-sm",
-              i === current && "bg-muted",
-            )}
+            value={item.key}
+            onSelect={() => choose(item)}
             style={item.indent ? { paddingLeft: 12 + item.indent * 14 } : undefined}
           >
             <span className={cn("truncate", mode === "files" && "font-mono text-xs")}>
               {item.label}
             </span>
             {item.detail && (
-              <span className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">
+              <CommandShortcut className={cn(mode !== "commands" && "font-mono tracking-normal")}>
                 {item.detail}
-              </span>
+              </CommandShortcut>
             )}
-          </li>
+          </CommandItem>
         ))}
-      </ul>
-    </>
+      </CommandList>
+    </Command>
   );
 }
 
@@ -204,7 +175,7 @@ export function CommandPalette({ commands: getCommands, ...props }: PaletteProps
       <DialogContent
         showCloseButton={false}
         finalFocus={() => restoreFocus.current}
-        className="top-[12%] block -translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl"
+        className="top-[12%] block -translate-y-0 gap-0 overflow-hidden rounded-4xl p-0 sm:max-w-xl"
       >
         <PaletteBody
           {...props}

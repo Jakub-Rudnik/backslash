@@ -432,7 +432,11 @@ function ProjectEditor({
   return (
     <div className="flex h-dvh flex-col">
       <AppHeader>
-        <svg aria-hidden viewBox="0 0 10 20" className="mx-1 h-4 w-2 shrink-0 text-brand">
+        <svg
+          aria-hidden
+          viewBox="0 0 10 20"
+          className="mx-1 h-4 w-2 shrink-0 text-brand max-sm:hidden"
+        >
           <line
             x1="2"
             y1="2"
@@ -508,8 +512,8 @@ function ProjectEditor({
               <SheetContent
                 side="left"
                 showCloseButton={false}
-                overlayClassName="top-12 left-11"
-                className="bg-sidebar data-[side=left]:top-12 data-[side=left]:left-11 data-[side=left]:h-auto data-[side=left]:w-72"
+                overlayClassName="top-12 left-12"
+                className="data-[side=left]:top-12 data-[side=left]:left-12 data-[side=left]:h-auto data-[side=left]:w-72"
               >
                 <SheetTitle className="sr-only">{sidebarView.title}</SheetTitle>
                 <SidebarPanel view={sidebarView} ctx={viewContext} />

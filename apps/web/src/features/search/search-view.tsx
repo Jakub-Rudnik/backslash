@@ -1,5 +1,8 @@
 import { listFiles } from "@backslash/shared/doc";
-import { Input } from "@/components/ui/input";
+import { Search01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Badge } from "@/components/ui/badge";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import type { CollabSession } from "@/features/editor/use-collab";
 import { useDocValue } from "@/features/editor/use-doc-value";
 import { MAX_MATCHES, searchFiles, type SearchMatch } from "@/features/search/search";
@@ -49,15 +52,19 @@ export function SearchView({
   return (
     <>
       <div className="shrink-0 space-y-1.5 p-2">
-        <Input
-          autoFocus
-          type="search"
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          placeholder="Search in text files"
-          aria-label="Search in text files"
-          className="h-8"
-        />
+        <InputGroup>
+          <InputGroupInput
+            autoFocus
+            type="search"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder="Search in text files"
+            aria-label="Search in text files"
+          />
+          <InputGroupAddon>
+            <HugeiconsIcon icon={Search01Icon} />
+          </InputGroupAddon>
+        </InputGroup>
         {query.trim() && (
           <p className="px-1 text-xs text-muted-foreground">
             {count === 0
@@ -71,9 +78,9 @@ export function SearchView({
           <section key={file.id} className="mb-1">
             <h3 className="flex items-center gap-2 px-2 py-1 text-xs font-medium">
               <span className="truncate font-mono">{file.path}</span>
-              <span className="ml-auto shrink-0 rounded-full bg-sidebar-accent px-1.5 text-[10px] text-muted-foreground tabular-nums">
+              <Badge variant="secondary" className="ml-auto tabular-nums">
                 {file.matches.length}
-              </span>
+              </Badge>
             </h3>
             <ul>
               {file.matches.map((m) => (
@@ -81,7 +88,7 @@ export function SearchView({
                   <button
                     type="button"
                     onClick={() => openAt(file.id, m.line)}
-                    className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-md pr-2 pl-4 text-left font-mono text-xs hover:bg-sidebar-accent"
+                    className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-md pr-2 pl-4 text-left font-mono text-xs hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
                   >
                     <span className="w-6 shrink-0 text-right text-muted-foreground tabular-nums">
                       {m.line}
