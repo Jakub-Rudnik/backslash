@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import * as z from "zod";
 
-export const VIEW_IDS = ["files", "outline"] as const;
+export const VIEW_IDS = ["files", "outline", "search"] as const;
 export type ViewId = (typeof VIEW_IDS)[number];
 
 export const DEFAULT_SIDEBAR_WIDTH = 240;
