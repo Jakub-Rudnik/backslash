@@ -5,7 +5,6 @@ import {
   ArrowRight01Icon,
   Cancel01Icon,
   Delete02Icon,
-  Download04Icon,
   File01Icon,
   FileAddIcon,
   Folder01Icon,
@@ -21,7 +20,15 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "cn";
-import { useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useImperativeHandle,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +39,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
@@ -55,12 +61,18 @@ type FileTreeProps = {
   upload: ReturnType<typeof useUpload>;
   /** viewers: browse and download only */
   readOnly?: boolean;
-  onDownloadZip: () => void;
   activeId: string | null;
   peers: Peer[];
   onOpen: (id: string) => void;
   className?: string;
+  ref?: Ref<FileTreeHandle>;
 };
+
+/** Actions the Files view's toolbar (and the command palette) trigger on the tree. */
+export interface FileTreeHandle {
+  startCreate: (kind: "create" | "create-folder") => void;
+  pickFiles: () => void;
+}
 
 type DirNode = { kind: "dir"; name: string; path: string; children: TreeNode[] };
 type FileNode = { kind: "file"; name: string; path: string; file: DocFile };
@@ -227,11 +239,11 @@ export function FileTree({
   project,
   upload,
   readOnly = false,
-  onDownloadZip,
   activeId,
   peers,
   onOpen,
   className,
+  ref,
 }: FileTreeProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [dropDir, setDropDir] = useState<string | null>(null);
@@ -260,6 +272,11 @@ export function FileTree({
     uploadDir.current = dir;
     fileInput.current?.click();
   }
+
+  useImperativeHandle(ref, () => ({
+    startCreate: (kind) => startCreate(kind, ""),
+    pickFiles: () => pickFiles(""),
+  }));
 
   const hasFiles = (e: DragEvent) => e.dataTransfer.types.includes("Files");
 
@@ -646,64 +663,17 @@ export function FileTree({
 
   return (
     <div className={cn("flex flex-col text-sm", className)}>
-      <div className="flex h-10 shrink-0 items-center gap-0.5 border-b pr-1 pl-3">
-        <span className="mr-auto text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Files
-        </span>
-        {!readOnly && (
-          <>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="New file"
-              title="New file (use / for folders)"
-              onClick={() => startCreate("create", "")}
-            >
-              <HugeiconsIcon icon={FileAddIcon} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="New folder"
-              title="New folder"
-              onClick={() => startCreate("create-folder", "")}
-            >
-              <HugeiconsIcon icon={FolderAddIcon} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Upload files"
-              title="Upload files or a .zip (or drop them here)"
-              disabled={upload.busy}
-              onClick={() => pickFiles("")}
-            >
-              <HugeiconsIcon icon={Upload04Icon} />
-            </Button>
-          </>
-        )}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Download as ZIP"
-          title="Download project as .zip"
-          disabled={project.files.length === 0}
-          onClick={onDownloadZip}
-        >
-          <HugeiconsIcon icon={Download04Icon} />
-        </Button>
-        <input
-          ref={fileInput}
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => {
-            const files = e.target.files;
-            if (files?.length) void upload.start(fromFileList(files), uploadDir.current);
-            e.target.value = "";
-          }}
-        />
-      </div>
+      <input
+        ref={fileInput}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = e.target.files;
+          if (files?.length) void upload.start(fromFileList(files), uploadDir.current);
+          e.target.value = "";
+        }}
+      />
       <ContextMenu
         disabled={readOnly}
         open={menuOpen}
