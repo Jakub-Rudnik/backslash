@@ -1,44 +1,47 @@
-import { Pdf01Icon, SourceCodeIcon } from "@hugeicons/core-free-icons";
+import { FileViewIcon, SourceCodeIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { cn } from "cn";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLayoutSettings } from "@/features/sidebar/layout-settings";
 
+const PANES = [
+  { value: "code", label: "Code", icon: SourceCodeIcon },
+  { value: "pdf", label: "PDF", icon: FileViewIcon },
+] as const;
+
 /** Header toggles that show or hide the code and the PDF; one of them always stays on. */
-export function LayoutToggles({ className }: { className?: string }) {
+export function LayoutToggles() {
   const { settings, update } = useLayoutSettings();
-  const toggles = [
-    { key: "showCode", label: "Code", icon: SourceCodeIcon, on: settings.showCode },
-    { key: "showPdf", label: "PDF", icon: Pdf01Icon, on: settings.showPdf },
-  ] as const;
+  const shown = PANES.filter((p) => (p.value === "code" ? settings.showCode : settings.showPdf));
 
   return (
-    <div
-      role="group"
-      aria-label="Layout"
-      className={cn("flex shrink-0 items-center rounded-full bg-muted p-0.5", className)}
+    <ToggleGroup
+      multiple
+      variant="outline"
+      size="sm"
+      spacing={0}
+      aria-label="Panes"
+      value={shown.map((p) => p.value)}
+      onValueChange={(value) => {
+        if (value.length === 0) return;
+        update({ showCode: value.includes("code"), showPdf: value.includes("pdf") });
+      }}
     >
-      {toggles.map((t) => {
-        const last = t.on && toggles.every((o) => o === t || !o.on);
+      {PANES.map((p) => {
+        const on = shown.includes(p);
         return (
-          <button
-            key={t.key}
-            type="button"
-            aria-pressed={t.on}
-            disabled={last}
-            title={
-              last ? `${t.label} (the only pane shown)` : `${t.on ? "Hide" : "Show"} ${t.label}`
-            }
-            onClick={() => update({ [t.key]: !t.on })}
-            className={cn(
-              "flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-default",
-              t.on && "bg-background text-foreground shadow-sm",
-            )}
-          >
-            <HugeiconsIcon icon={t.icon} className="size-3.5" />
-            {t.label}
-          </button>
+          <Tooltip key={p.value}>
+            <TooltipTrigger render={<ToggleGroupItem value={p.value} aria-label={p.label} />}>
+              <HugeiconsIcon icon={p.icon} />
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {on && shown.length === 1
+                ? `${p.label} (the only pane shown)`
+                : `${on ? "Hide" : "Show"} ${p.label}`}
+            </TooltipContent>
+          </Tooltip>
         );
       })}
-    </div>
+    </ToggleGroup>
   );
 }

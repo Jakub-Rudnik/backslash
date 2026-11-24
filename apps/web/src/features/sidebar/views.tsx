@@ -23,6 +23,7 @@ export interface ViewContext {
   project: ProjectFiles;
   upload: ReturnType<typeof useUpload>;
   readOnly: boolean;
+  synced: boolean;
   activeId: string | null;
   peers: Peer[];
   openFile: (id: string) => void;
@@ -53,6 +54,8 @@ export interface SidebarView {
   id: ViewId;
   title: string;
   icon: IconSvgElement;
+  /** hidden from viewers */
+  editorsOnly?: boolean;
   actions: (ctx: ViewContext) => ViewAction[];
   render: (ctx: ViewContext) => ReactNode;
 }
@@ -115,9 +118,7 @@ export const VIEWS: SidebarView[] = [
     title: "Outline",
     icon: LeftToRightListBulletIcon,
     actions: () => [],
-    render: (ctx) => (
-      <OutlineView session={ctx.session} files={ctx.project.files} openAt={ctx.openAt} />
-    ),
+    render: (ctx) => <OutlineView session={ctx.session} synced={ctx.synced} openAt={ctx.openAt} />,
   },
   {
     id: "search",
@@ -135,8 +136,14 @@ export const VIEWS: SidebarView[] = [
   },
 ];
 
-export function viewById(id: ViewId): SidebarView {
-  return VIEWS.find((v) => v.id === id) ?? VIEWS[0];
+/** The views the current member may see. */
+export function viewsFor(readOnly: boolean) {
+  return VIEWS.filter((v) => !(v.editorsOnly && readOnly));
+}
+
+export function viewById(id: ViewId, readOnly: boolean): SidebarView {
+  const views = viewsFor(readOnly);
+  return views.find((v) => v.id === id) ?? views[0];
 }
 
 /** The view's actions the current member may use. */

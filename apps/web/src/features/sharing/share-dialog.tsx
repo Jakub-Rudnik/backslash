@@ -87,8 +87,10 @@ function CopyLink({ url }: { url: string }) {
   );
 }
 
-/** Members, roles and invite links of a project. Only the owner can change anything. */
-/** Members and invites; `open` is controlled so the command palette can open it too. */
+/**
+ * Members, roles and invite links of a project. Only the owner can change anything. `open` is
+ * controlled so the command palette can open it too.
+ */
 export function ShareDialog({
   projectId,
   role,
@@ -156,9 +158,9 @@ export function ShareDialog({
         if (!next) setCreated(null);
       }}
     >
-      <DialogTrigger render={<Button variant="outline" size="sm" />}>
+      <DialogTrigger render={<Button variant="outline" size="sm" aria-label="Share" />}>
         <HugeiconsIcon icon={UserGroupIcon} data-icon="inline-start" />
-        Share
+        <span className="max-sm:hidden">Share</span>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>

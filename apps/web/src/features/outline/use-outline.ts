@@ -1,47 +1,39 @@
-import { filesMap, getMainFile, listFiles, projectMap } from "@backslash/shared/doc";
-import { useEffect, useState } from "react";
+import { getMainFile, listFiles } from "@backslash/shared/doc";
 import type { CollabSession } from "@/features/editor/use-collab";
+import { useDocValue } from "@/features/editor/use-doc-value";
 import { buildOutline, type OutlineHeading } from "@/features/outline/outline";
 
-const UPDATE_DELAY_MS = 150;
+/** A heading with the id of its file and its depth below the Outline's top level. */
+export interface OutlineEntry extends OutlineHeading {
+  fileId: string;
+  depth: number;
+}
 
-export type Outline = { mainPath: string | null; headings: OutlineHeading[] };
+export type Outline = { mainPath: string | null; headings: OutlineEntry[] };
 
-function read(session: CollabSession): Outline {
+const EMPTY: Outline = { mainPath: null, headings: [] };
+
+function readOutline(session: CollabSession): Outline {
   const files = listFiles(session.doc);
   const main = getMainFile(session.doc, files);
-  if (!main) return { mainPath: null, headings: [] };
+  if (!main) return EMPTY;
   const byPath = new Map(files.map((f) => [f.path, f]));
   const readFile = (path: string) => {
     const file = byPath.get(path);
     return file?.kind === "text" ? file.text.toJSON() : null;
   };
-  return { mainPath: main.path, headings: buildOutline(main.path, readFile) };
+  const headings = buildOutline(main.path, readFile);
+  const top = Math.min(...headings.map((h) => h.level));
+  return {
+    mainPath: main.path,
+    headings: headings.flatMap((h) => {
+      const file = byPath.get(h.path);
+      return file ? [{ ...h, fileId: file.id, depth: h.level - top }] : [];
+    }),
+  };
 }
 
 /** The project's Outline, kept up to date with everyone's edits. */
 export function useOutline(session: CollabSession | null): Outline {
-  const [outline, setOutline] = useState<Outline>({ mainPath: null, headings: [] });
-
-  useEffect(() => {
-    if (!session) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const update = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => setOutline(read(session)), UPDATE_DELAY_MS);
-    };
-    const files = filesMap(session.doc);
-    const project = projectMap(session.doc);
-    // oxlint-disable-next-line react/set-state-in-effect
-    setOutline(read(session));
-    files.observeDeep(update);
-    project.observe(update);
-    return () => {
-      clearTimeout(timer);
-      files.unobserveDeep(update);
-      project.unobserve(update);
-    };
-  }, [session]);
-
-  return outline;
+  return useDocValue(session, readOutline, EMPTY);
 }
