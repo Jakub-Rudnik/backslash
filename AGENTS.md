@@ -4,8 +4,6 @@ LaTeX editor in the browser: projects with multiple files, real-time collaborati
 
 ## Architecture
 
-pnpm monorepo, TypeScript everywhere. Postgres and Valkey run via `docker compose`.
-
 - `apps/web`: React SPA (React Router, TanStack Query, Base UI + shadcn, Tailwind, CodeMirror, pdf.js). Edits the Yjs doc through Hocuspocus.
 - `apps/api`: Fastify. Auth (Better Auth), projects, members, invites, file uploads, compile requests.
 - `apps/collab`: Hocuspocus server. One Yjs doc per project, persisted in Postgres.
@@ -15,11 +13,11 @@ pnpm monorepo, TypeScript everywhere. Postgres and Valkey run via `docker compos
 
 ## Structure
 
-- Group code by feature, not by kind. Files that change together live together.
-- `apps/web/src/features/<feature>`: components, hooks and helpers of one feature, flat in one folder. Shared code goes in `components/` (shadcn UI in `components/ui`), `hooks/` and `lib/`. `pages/` only holds routed pages.
+- Group code by feature: files that change together live together in one flat feature folder.
+- `apps/web/src/features/<feature>`: components, hooks and helpers of one feature. Shared code goes in `components/` (shadcn UI in `components/ui`), `hooks/` and `lib/`. `pages/` only holds routed pages.
 - `apps/api/src/features/<feature>`: routes, service and storage of one feature. Shared code goes in `src/lib`.
 - `apps/collab` and `apps/compiler` are small single-purpose services and stay flat.
-- No `index.ts` barrel files, no fixed set of subfolders per feature. Create a new feature folder only when the code doesn't belong to an existing one.
+- Import each module from the file that defines it (no `index.ts` barrels). Put new code in an existing feature folder; create a new one only when none fits.
 
 ## Local setup
 
@@ -32,51 +30,49 @@ pnpm monorepo, TypeScript everywhere. Postgres and Valkey run via `docker compos
 
 The toolchain is Vite+, run through the global `vp` CLI. Docs are in `node_modules/vite-plus/docs`.
 
-- `vp install` installs dependencies. Do not call pnpm, npm or npx directly.
-- `vp check` formats, lints and type checks; `vp check --fix` fixes what it can.
-- `vp run -r test` runs all tests. `vp run ready` runs check, tests and build.
-- `vp run dev` starts every app.
-- `vpx <file>` runs a TS script. Do not add tsx or ts-node.
+- Run every package command through `vp` (`vp install` installs dependencies), never pnpm, npm or npx.
+- `vpx <file>` runs a TS script, in place of tsx or ts-node.
 - `vp <name>` is a built-in command and `vp run <name>` is a `package.json` script. They can differ.
+- `vp run -r test` runs all tests.
 - Import Vite and Vitest APIs from `vite-plus`; lint enforces this.
 
-A pre-commit hook runs `vp check --fix` on staged files. Before you finish a change, run `vp check` and the tests of the apps you touched.
+A pre-commit hook runs `vp check --fix` on staged files. Before you finish a change, run `vp check` (format, lint, type check) and the tests of the apps you touched.
 
 ## Code
 
-- Keep it simple. Solve the problem at hand without speculative abstractions, extra layers, unused options or generic helpers made for a single use. A few repeated lines are better than the wrong abstraction.
-- Code should explain itself through names and structure.
-- Follow the patterns already used in the app you are changing.
+- Write only what the problem at hand needs, and extract a helper once it has a second caller. A few repeated lines are better than the wrong abstraction.
 - No `as` type assertions (`as const` is fine): validate unknown data with Zod or narrow it with `instanceof`. Declare interfaces and `extends` instead of `Pick`/`Omit`. Lint enforces both.
 
 ## Tests
 
-- Unit tests only for logic that can realistically break: access control, concurrency, parsing, sandboxing, non-trivial data transformations. No tests for trivial functions, plain wiring or what a library already guarantees.
+- Unit tests only for logic that can realistically break: access control, concurrency, parsing, sandboxing, non-trivial data transformations.
 - Prefer a few tests that cover a whole behavior over many small ones per function.
-- UI flows that matter (sign in, projects, editing, uploads, compiling, sharing) are covered by end-to-end tests. When you change one of them, update or add its e2e test.
+- UI flows that matter (sign in, projects, editing, uploads, compiling, sharing) need end-to-end tests. When you change one of them, update or add its e2e test.
 
 ## UI changes
 
-After changing UI, run `vp run dev` and check the changed screens in a real browser: use the browser built into your environment, or the Playwright MCP server from `.mcp.json`. Check light and dark theme, a narrow (mobile) width, empty, loading and error states, and that the console has no errors. A passing `vp check` does not mean the UI works.
+After changing UI, run `vp run dev` and check the changed screens in a real browser: use the browser built into your environment, or the Playwright MCP server from `.mcp.json`. Check light and dark theme, a narrow (mobile) width, empty, loading and error states, and that the console has no errors.
 
 ## Git and versions
 
-- Every feature or fix goes on its own branch off `main` (`feat/<name>`, `fix/<name>`, `chore/<name>`) and is merged through a pull request. Do not commit features straight to `main`.
+- Every feature or fix goes on its own branch off `main` (`feat/<name>`, `fix/<name>`, `chore/<name>`) and is merged through a pull request.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org): `type(scope): summary`, e.g. `feat(web): ...`, `fix(api): ...`. Types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`, `ci`. Mark breaking changes with `!` (`feat(api)!: ...`).
-- The project has one version, in the root `package.json`, following [SemVer](https://semver.org). The apps and packages have none. While in alpha (`0.x`), a branch with a `feat` or a breaking change bumps the minor version (`0.1.0` → `0.2.0`), and a branch with only fixes bumps the patch version (`0.1.0` → `0.1.1`). Other changes (`docs`, `chore`, `refactor` and so on) do not bump it.
-- No git tags or GitHub releases for now.
+- The project has one version, in the root `package.json` only (no versions in apps or packages, no git tags or GitHub releases), following [SemVer](https://semver.org). While in alpha (`0.x`), a branch with a `feat` or a breaking change bumps the minor version (`0.1.0` → `0.2.0`), and a branch with only fixes bumps the patch version (`0.1.0` → `0.1.1`). `docs`, `chore`, `refactor` and other types keep the version as is.
 
 ## Formatting
 
-Formatting is defined in the `fmt` block of the root `vite.config.ts`: 2-space indent, no tabs, double quotes, semicolons, trailing commas, LF, 100 columns. Do not add other formatter configs, and run `vp check --fix` instead of formatting by hand.
+Formatting lives only in the `fmt` block of the root `vite.config.ts`. Apply it with `vp check --fix`.
 
 ## Comments
 
-- Do not write comments that explain what the code does or narrate its steps.
-- No line or inline comments, TODO/FIXME notes or commented-out code.
-- JSDoc (`/** ... */`) is allowed above a function, method or class only when it adds something the name and signature don't already say. Most functions need none.
-- Allowed: short section headers that visually split a file (`/* Linting */` in tsconfig, `// --- members ---` in a long routes file) and tool directives (`// oxlint-disable-next-line`, `// @ts-expect-error`).
+Let names and structure explain the code. The only comments are:
+
+- JSDoc (`/** ... */`) above a function, method or class when it adds something the name and signature don't already say. Most functions need none.
+- Short section headers that visually split a file (`/* Linting */` in tsconfig, `// --- members ---` in a long routes file).
+- Tool directives (`// oxlint-disable-next-line`, `// @ts-expect-error`).
+
+Everything else goes: comments narrating what the code does, inline comments, TODO/FIXME notes, commented-out code.
 
 ## Files
 
-Do not create new Markdown files (notes, plans, summaries, docs) unless explicitly asked. Existing ones (`README.md`, `AGENTS.md`) may be edited.
+Create new Markdown files (notes, plans, summaries, docs) only when explicitly asked. Editing existing ones (`README.md`, `AGENTS.md`) is fine.
