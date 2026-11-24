@@ -4,6 +4,7 @@ import {
   Folder01Icon,
   FolderAddIcon,
   LeftToRightListBulletIcon,
+  Search01Icon,
   Upload04Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
@@ -13,6 +14,7 @@ import { FileTree, type FileTreeHandle } from "@/features/files/file-tree";
 import type { ProjectFiles } from "@/features/files/use-project-files";
 import type { useUpload } from "@/features/files/use-upload";
 import { OutlineView } from "@/features/outline/outline-view";
+import { SearchView } from "@/features/search/search-view";
 import type { ViewId } from "@/features/sidebar/layout-settings";
 
 /** What the project page hands every sidebar view. */
@@ -26,6 +28,9 @@ export interface ViewContext {
   openFile: (id: string) => void;
   /** opens the file scrolled to `line` (1-based) */
   openAt: (id: string, line: number) => void;
+  /** kept by the page, so it survives switching views */
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
   downloadZip: () => void;
   fileTree: RefObject<FileTreeHandle | null>;
 }
@@ -111,6 +116,20 @@ export const VIEWS: SidebarView[] = [
     actions: () => [],
     render: (ctx) => (
       <OutlineView session={ctx.session} files={ctx.project.files} openAt={ctx.openAt} />
+    ),
+  },
+  {
+    id: "search",
+    title: "Search",
+    icon: Search01Icon,
+    actions: () => [],
+    render: (ctx) => (
+      <SearchView
+        session={ctx.session}
+        query={ctx.searchQuery}
+        onQueryChange={ctx.setSearchQuery}
+        openAt={ctx.openAt}
+      />
     ),
   },
 ];

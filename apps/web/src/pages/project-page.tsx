@@ -123,6 +123,7 @@ function ProjectEditor({
   const { theme } = useTheme();
   const sidebar = useSidebar();
   const fileTree = useRef<FileTreeHandle>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { run, isPending, error } = useCompile(projectId, build.latest);
   useEffect(() => {
@@ -149,6 +150,8 @@ function ProjectEditor({
     peers,
     openFile,
     openAt,
+    searchQuery,
+    setSearchQuery,
     downloadZip,
     fileTree,
   };
