@@ -33,6 +33,10 @@ Where a file or folder sits in a project, relative to the project root.
 The `.tex` file a compile starts from; each project has exactly one.
 _Avoid_: root file, entry point, main document
 
+**Outline**:
+The headings of a project's document, from parts down to subsubsections, in reading order: those in the main file and in the files it includes.
+_Avoid_: table of contents, TOC, structure
+
 ### Compiling
 
 **Compile**:
