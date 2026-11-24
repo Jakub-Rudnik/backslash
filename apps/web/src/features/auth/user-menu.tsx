@@ -38,7 +38,7 @@ export function UserMenu() {
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label="Account"
-          className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[11px] font-semibold text-black outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-[11px] font-semibold text-black outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
           style={{ backgroundColor: color }}
         >
           {initials(account.name)}

@@ -32,6 +32,7 @@ import {
 } from "@/features/sidebar/views";
 import { useLayoutSettings } from "@/features/sidebar/layout-settings";
 import { LayoutToggles } from "@/features/sidebar/layout-toggles";
+import { PhoneTabs } from "@/features/sidebar/phone-tabs";
 import { CommandPalette, type PaletteCommand } from "@/features/palette/command-palette";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useActiveFile } from "@/features/editor/use-active-file";
@@ -250,18 +251,29 @@ function ProjectEditor({
         run: () => sidebar.show(v.id),
       })),
       ...VIEWS.flatMap(viewCommands),
-      {
-        id: "toggle-code",
-        title: layout.showCode ? "Hide code" : "Show code",
-        run: () =>
-          updateLayout(layout.showCode ? { showCode: false, showPdf: true } : { showCode: true }),
-      },
-      {
-        id: "toggle-pdf",
-        title: layout.showPdf ? "Hide PDF" : "Show PDF",
-        run: () =>
-          updateLayout(layout.showPdf ? { showPdf: false, showCode: true } : { showPdf: true }),
-      },
+      ...(sidebar.phone
+        ? [
+            { id: "show-code", title: "Show code", run: () => sidebar.setPhoneTab("code") },
+            { id: "show-pdf", title: "Show PDF", run: () => sidebar.setPhoneTab("pdf") },
+          ]
+        : [
+            {
+              id: "toggle-code",
+              title: layout.showCode ? "Hide code" : "Show code",
+              run: () =>
+                updateLayout(
+                  layout.showCode ? { showCode: false, showPdf: true } : { showCode: true },
+                ),
+            },
+            {
+              id: "toggle-pdf",
+              title: layout.showPdf ? "Hide PDF" : "Show PDF",
+              run: () =>
+                updateLayout(
+                  layout.showPdf ? { showPdf: false, showCode: true } : { showPdf: true },
+                ),
+            },
+          ]),
       ...(mainFile
         ? [{ id: "compile", title: "Compile", keys: "Ctrl+S", run: () => void compile() }]
         : []),
@@ -271,7 +283,8 @@ function ProjectEditor({
               id: "compile-errors",
               title: "Show compile errors",
               run: () => {
-                updateLayout({ showPdf: true });
+                if (sidebar.phone) sidebar.setPhoneTab("pdf");
+                else updateLayout({ showPdf: true });
                 setErrorsOpen(true);
               },
             },
@@ -420,7 +433,7 @@ function ProjectEditor({
   );
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-dvh flex-col">
       <AppHeader>
         <svg aria-hidden viewBox="0 0 10 20" className="mx-1 h-4 w-2 shrink-0 text-brand">
           <line
@@ -438,7 +451,7 @@ function ProjectEditor({
         </span>
         {readOnly && <Badge variant="secondary">Read-only</Badge>}
         <div className="flex-1" />
-        <LayoutToggles />
+        {!sidebar.phone && <LayoutToggles />}
         <CollabStatus status={status} me={me} peers={peers} />
         <ShareDialog
           projectId={projectId}
@@ -454,53 +467,73 @@ function ProjectEditor({
         openFile={openFile}
         openAt={openAt}
       />
-      <div className="flex min-h-0 flex-1">
-        <ActivityBar view={sidebar.view} open={sidebar.open} onSelect={sidebar.select} />
-        {!sidebar.docked && (
-          <Sheet open={sidebar.open} onOpenChange={sidebar.setOpen}>
-            <SheetContent
-              side="left"
-              showCloseButton={false}
-              className="bg-sidebar data-[side=left]:top-12 data-[side=left]:left-11 data-[side=left]:h-auto data-[side=left]:w-72"
-            >
-              <SheetTitle className="sr-only">{sidebarView.title}</SheetTitle>
-              <SidebarPanel view={sidebarView} ctx={viewContext} />
-            </SheetContent>
-          </Sheet>
-        )}
-        <ResizablePanelGroup
-          orientation="horizontal"
-          className="min-w-0 flex-1"
-          onLayoutChanged={sidebar.onLayoutChanged}
-        >
-          {sidebar.docked && (
-            <>
-              <ResizablePanel
-                id="sidebar"
-                panelRef={sidebar.panelRef}
-                collapsible
-                defaultSize={sidebar.initialSize}
-                minSize={160}
-                maxSize="40"
-              >
-                <SidebarPanel view={sidebarView} ctx={viewContext} />
-              </ResizablePanel>
-              <ResizableHandle />
-            </>
-          )}
-          {layout.showCode && (
-            <ResizablePanel id="code" className="flex flex-col">
+      {sidebar.phone ? (
+        <>
+          <div className="min-h-0 flex-1">
+            <SidebarPanel
+              view={sidebarView}
+              ctx={viewContext}
+              onSwitchView={sidebar.show}
+              className={cn(sidebar.phoneTab !== "view" && "hidden")}
+            />
+            <div className={cn("flex h-full flex-col", sidebar.phoneTab !== "code" && "hidden")}>
               {codePane}
-            </ResizablePanel>
-          )}
-          {layout.showCode && layout.showPdf && <ResizableHandle withHandle />}
-          {layout.showPdf && (
-            <ResizablePanel id="pdf" className="flex flex-col">
+            </div>
+            <div className={cn("flex h-full flex-col", sidebar.phoneTab !== "pdf" && "hidden")}>
               {pdfPane}
-            </ResizablePanel>
+            </div>
+          </div>
+          <PhoneTabs view={sidebarView} tab={sidebar.phoneTab} onSelect={sidebar.setPhoneTab} />
+        </>
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          <ActivityBar view={sidebar.view} open={sidebar.open} onSelect={sidebar.select} />
+          {!sidebar.docked && (
+            <Sheet open={sidebar.open} onOpenChange={sidebar.setOpen}>
+              <SheetContent
+                side="left"
+                showCloseButton={false}
+                className="bg-sidebar data-[side=left]:top-12 data-[side=left]:left-11 data-[side=left]:h-auto data-[side=left]:w-72"
+              >
+                <SheetTitle className="sr-only">{sidebarView.title}</SheetTitle>
+                <SidebarPanel view={sidebarView} ctx={viewContext} />
+              </SheetContent>
+            </Sheet>
           )}
-        </ResizablePanelGroup>
-      </div>
+          <ResizablePanelGroup
+            orientation="horizontal"
+            className="min-w-0 flex-1"
+            onLayoutChanged={sidebar.onLayoutChanged}
+          >
+            {sidebar.docked && (
+              <>
+                <ResizablePanel
+                  id="sidebar"
+                  panelRef={sidebar.panelRef}
+                  collapsible
+                  defaultSize={sidebar.initialSize}
+                  minSize={160}
+                  maxSize="40"
+                >
+                  <SidebarPanel view={sidebarView} ctx={viewContext} />
+                </ResizablePanel>
+                <ResizableHandle />
+              </>
+            )}
+            {layout.showCode && (
+              <ResizablePanel id="code" className="flex flex-col">
+                {codePane}
+              </ResizablePanel>
+            )}
+            {layout.showCode && layout.showPdf && <ResizableHandle withHandle />}
+            {layout.showPdf && (
+              <ResizablePanel id="pdf" className="flex flex-col">
+                {pdfPane}
+              </ResizablePanel>
+            )}
+          </ResizablePanelGroup>
+        </div>
+      )}
     </div>
   );
 }

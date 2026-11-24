@@ -156,9 +156,9 @@ export function ShareDialog({
         if (!next) setCreated(null);
       }}
     >
-      <DialogTrigger render={<Button variant="outline" size="sm" />}>
+      <DialogTrigger render={<Button variant="outline" size="sm" aria-label="Share" />}>
         <HugeiconsIcon icon={UserGroupIcon} data-icon="inline-start" />
-        Share
+        <span className="max-sm:hidden">Share</span>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>

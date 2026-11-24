@@ -48,19 +48,46 @@ export function SidebarPanel({
   view,
   ctx,
   className,
+  onSwitchView,
 }: {
   view: SidebarView;
   ctx: ViewContext;
   className?: string;
+  /** shows a switch between the views in place of the title (phones have no activity bar) */
+  onSwitchView?: (id: ViewId) => void;
 }) {
   return (
     <div
       className={cn("flex h-full flex-col bg-sidebar text-sm text-sidebar-foreground", className)}
     >
       <div className="flex h-10 shrink-0 items-center gap-0.5 border-b border-sidebar-border pr-1 pl-3">
-        <h2 className="mr-auto text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          {view.title}
-        </h2>
+        {onSwitchView ? (
+          <div
+            role="tablist"
+            aria-label="Sidebar views"
+            className="mr-auto flex rounded-full bg-sidebar-accent p-0.5"
+          >
+            {VIEWS.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                role="tab"
+                aria-selected={v.id === view.id}
+                onClick={() => onSwitchView(v.id)}
+                className={cn(
+                  "h-7 cursor-pointer rounded-full px-3 text-xs font-medium text-muted-foreground",
+                  v.id === view.id && "bg-background text-foreground shadow-sm",
+                )}
+              >
+                {v.title}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <h2 className="mr-auto text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            {view.title}
+          </h2>
+        )}
         {actionsFor(view, ctx).map((a) => (
           <Button
             key={a.id}

@@ -1,20 +1,28 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { LayoutChangedMeta, PanelImperativeHandle } from "react-resizable-panels";
-import { LG, useMediaQuery } from "@/hooks/use-media-query";
+import { LG, MD, useMediaQuery } from "@/hooks/use-media-query";
 import { useLayoutSettings, type ViewId } from "@/features/sidebar/layout-settings";
 
+export type PhoneTab = "view" | "code" | "pdf";
+
 /**
- * Sidebar state: from `lg` up a docked, resizable panel remembered across projects; below it an
- * overlay that starts closed and closes once a file is opened. `Ctrl+Shift+B` toggles either.
+ * Sidebar state: from `lg` up a docked, resizable panel remembered across projects; from `md` an
+ * overlay that starts closed and closes once a file is opened; below `md` (phones) one pane at a
+ * time, where the sidebar is the first tab. `Ctrl+Shift+B` toggles any of them.
  */
 export function useSidebar() {
   const docked = useMediaQuery(LG);
+  const phone = !useMediaQuery(MD);
   const { settings, update } = useLayoutSettings();
   const panelRef = useRef<PanelImperativeHandle | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
-  const open = docked ? settings.sidebarOpen : overlayOpen;
+  const [phoneTab, setPhoneTab] = useState<PhoneTab>("code");
+  let open = overlayOpen;
+  if (phone) open = phoneTab === "view";
+  else if (docked) open = settings.sidebarOpen;
 
   function setOpen(next: boolean) {
+    if (phone) return setPhoneTab(next ? "view" : "code");
     if (!docked) return setOverlayOpen(next);
     const panel = panelRef.current;
     if (!panel) return;
@@ -58,6 +66,9 @@ export function useSidebar() {
 
   return {
     docked,
+    phone,
+    phoneTab,
+    setPhoneTab,
     view: settings.view,
     open,
     /** docked panel's size on mount */
@@ -67,7 +78,10 @@ export function useSidebar() {
     show,
     setOpen,
     onLayoutChanged,
-    /** after a file is opened, the overlay gets out of the way */
-    fileOpened: () => setOverlayOpen(false),
+    /** after a file is opened, the overlay gets out of the way and phones show the code */
+    fileOpened: () => {
+      setOverlayOpen(false);
+      setPhoneTab("code");
+    },
   };
 }
