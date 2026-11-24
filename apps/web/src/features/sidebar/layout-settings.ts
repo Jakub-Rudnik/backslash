@@ -8,11 +8,13 @@ export const DEFAULT_SIDEBAR_WIDTH = 240;
 
 const STORAGE_KEY = "project-layout";
 
-/** The docked (`lg` and up) layout, shared by all projects like the theme. */
+/** The project page layout (sidebar from `lg` up, Code and PDF toggles), shared by all projects like the theme. */
 const LayoutSettings = z.object({
   sidebarOpen: z.boolean().catch(true),
   view: z.enum(VIEW_IDS).catch("files"),
   sidebarWidth: z.number().min(0).catch(DEFAULT_SIDEBAR_WIDTH),
+  showCode: z.boolean().catch(true),
+  showPdf: z.boolean().catch(true),
 });
 export type LayoutSettings = z.infer<typeof LayoutSettings>;
 

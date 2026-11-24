@@ -8,7 +8,7 @@ import {
   Upload04Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
-import type { ReactNode, RefObject } from "react";
+import type { ReactNode, Ref } from "react";
 import type { CollabSession, Peer } from "@/features/editor/use-collab";
 import { FileTree, type FileTreeHandle } from "@/features/files/file-tree";
 import type { ProjectFiles } from "@/features/files/use-project-files";
@@ -32,7 +32,8 @@ export interface ViewContext {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   downloadZip: () => void;
-  fileTree: RefObject<FileTreeHandle | null>;
+  /** the Files view's tree, while it's mounted */
+  fileTree: FileTreeHandle & { ref: Ref<FileTreeHandle> };
 }
 
 /** A toolbar button of a view. */
@@ -69,14 +70,14 @@ export const VIEWS: SidebarView[] = [
         hint: "New file (use / for folders)",
         icon: FileAddIcon,
         editorsOnly: true,
-        run: () => ctx.fileTree.current?.startCreate("create"),
+        run: () => ctx.fileTree.startCreate("create"),
       },
       {
         id: "new-folder",
         title: "New folder",
         icon: FolderAddIcon,
         editorsOnly: true,
-        run: () => ctx.fileTree.current?.startCreate("create-folder"),
+        run: () => ctx.fileTree.startCreate("create-folder"),
       },
       {
         id: "upload",
@@ -85,7 +86,7 @@ export const VIEWS: SidebarView[] = [
         icon: Upload04Icon,
         editorsOnly: true,
         disabled: ctx.upload.busy,
-        run: () => ctx.fileTree.current?.pickFiles(),
+        run: () => ctx.fileTree.pickFiles(),
       },
       {
         id: "download-zip",
@@ -98,7 +99,7 @@ export const VIEWS: SidebarView[] = [
     ],
     render: (ctx) => (
       <FileTree
-        ref={ctx.fileTree}
+        ref={ctx.fileTree.ref}
         project={ctx.project}
         upload={ctx.upload}
         readOnly={ctx.readOnly}
