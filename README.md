@@ -70,7 +70,15 @@ One machine with Docker Compose: Caddy (HTTPS, serves the web app, proxies `/api
 
 ## Development
 
-Setup and commands are in [`AGENTS.md`](AGENTS.md).
+Requirements: Node, Docker, TeX Live with `latexmk`, bubblewrap (`bwrap`, Linux) for the compile sandbox, and the global `vp` CLI of [Vite+](https://viteplus.dev).
+
+1. `vp install` installs the dependencies.
+2. `docker compose up -d` starts Postgres, Valkey and Mailpit (inbox for password reset mails at http://localhost:8025).
+3. Copy `.env.example` to `.env` in `apps/api`, `apps/collab` and `apps/compiler`. Set `BETTER_AUTH_SECRET` and `INTERNAL_SECRET` to the same values in `api` and `collab` (`openssl rand -base64 32`).
+4. Create the database for the tests: `docker compose exec postgres psql -U backslash -c "create database backslash_test"`.
+5. `vp run dev` starts every app. Migrations run on startup.
+
+`vp run ready` runs the checks, tests and build, like CI. Code rules are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md), branch, commit and version rules in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 

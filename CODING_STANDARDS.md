@@ -2,16 +2,20 @@
 
 ## Structure
 
-- Group code by feature: files that change together live together in one flat feature folder.
-- `apps/web/src/features/<feature>`: components, hooks and helpers of one feature. Shared code goes in `components/` (shadcn UI in `components/ui`), `hooks/` and `lib/`. `pages/` only holds routed pages.
+- Group code by feature: files that change together live in one flat feature folder.
+- `apps/web/src/features/<feature>`: components, hooks and helpers of one feature. Shared code goes in `components/` (shadcn UI in `components/ui`), `hooks/` and `lib/`; `pages/` holds only routed pages.
 - `apps/api/src/features/<feature>`: routes, service and storage of one feature. Shared code goes in `src/lib`.
 - `apps/collab` and `apps/compiler` are small single-purpose services and stay flat.
-- Import each module from the file that defines it (no `index.ts` barrels). Put new code in an existing feature folder; create a new one only when none fits.
+- Import each module from the file that defines it (no `index.ts` barrels). Put new code in an existing feature folder; create one only when none fits.
 
 ## Code
 
-- Write only what the problem at hand needs, and extract a helper once it has a second caller. A few repeated lines are better than the wrong abstraction.
-- No `as` type assertions (`as const` is fine): validate unknown data with Zod or narrow it with `instanceof`. Declare interfaces and `extends` instead of `Pick`/`Omit`. Lint enforces both.
+- Build only what the task needs (YAGNI) and extract a helper at its second caller.
+- Validate unknown data with Zod or narrow it with `instanceof`; `as` assertions are limited to `as const`.
+- Declare interfaces and `extends` in place of `Pick`/`Omit`.
+- Import Vite and Vitest APIs from `vite-plus`.
+
+Lint enforces the last three.
 
 ## Comments
 
@@ -21,14 +25,27 @@ Let names and structure explain the code. The only comments are:
 - Short section headers that visually split a file (`/* Linting */` in tsconfig, `// --- members ---` in a long routes file).
 - Tool directives (`// oxlint-disable-next-line`, `// @ts-expect-error`).
 
-Everything else goes: comments narrating what the code does, inline comments, TODO/FIXME notes, commented-out code.
-
 ## Tests
 
 - Unit tests only for logic that can realistically break: access control, concurrency, parsing, sandboxing, non-trivial data transformations.
 - Prefer a few tests that cover a whole behavior over many small ones per function.
-- UI flows that matter (sign in, projects, editing, uploads, compiling, sharing) need end-to-end tests. When you change one of them, update or add its e2e test.
+- The UI flows that matter (sign in, projects, editing, uploads, compiling, sharing) have no automated end-to-end tests yet; the UI checklist covers them by hand.
 
-## Formatting
+## Done
 
-Formatting lives only in the `fmt` block of the root `vite.config.ts`. Apply it with `vp check --fix`.
+A change is done when all of these hold:
+
+- `vp check` exits 0. `vp check --fix` applies the formatting and the lint fixes it can.
+- `vp run test` exits 0 in every app and package you touched that has a `test` script.
+- If it changes UI: every item of the UI checklist holds.
+
+### UI checklist
+
+Run `vp run dev` and open each changed screen in a real browser (the one built into your environment, or the Playwright MCP server from `.mcp.json`). Each item holds for every changed screen, or does not apply to it:
+
+- Light theme renders correctly.
+- Dark theme renders correctly.
+- Narrow (mobile) width renders correctly.
+- Empty, loading and error states each render correctly.
+- Every changed flow works from start to finish.
+- The browser console shows no errors.
