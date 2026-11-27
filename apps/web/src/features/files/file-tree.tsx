@@ -26,6 +26,7 @@ import {
   useState,
   type DragEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
   type Ref,
 } from "react";
@@ -45,6 +46,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -54,7 +56,7 @@ import type { Peer } from "@/features/editor/use-collab";
 import type { ProjectFiles } from "@/features/files/use-project-files";
 import type { useUpload } from "@/features/files/use-upload";
 import { previewType } from "@/features/files/mime";
-import { fromDataTransfer, fromFileList } from "@/features/files/upload-sources";
+import { fromFileList } from "@/features/files/upload-sources";
 
 type FileTreeProps = {
   project: ProjectFiles;
@@ -74,6 +76,9 @@ export interface FileTreeHandle {
   pickFiles: () => void;
 }
 
+/** The tree's drop area, where a drop lands in the folder under the pointer. */
+export const FILE_TREE_DROP = "[data-file-tree-drop]";
+
 type DirNode = { kind: "dir"; name: string; path: string; children: TreeNode[] };
 type FileNode = { kind: "file"; name: string; path: string; file: DocFile };
 type TreeNode = DirNode | FileNode;
@@ -84,14 +89,21 @@ type Editing =
   | { kind: "rename-file"; id: string; path: string }
   | { kind: "rename-folder"; path: string };
 
-type Deleting = { kind: "file"; id: string; path: string } | { kind: "folder"; path: string };
-
 type Entry = { kind: "file"; id: string; path: string } | { kind: "folder"; path: string };
 
-type MenuTarget = Entry | { kind: "root" };
+type MenuTarget = Entry | { kind: "selection"; items: Entry[] } | { kind: "root" };
 
 function allFolders(nodes: TreeNode[]): string[] {
   return nodes.flatMap((n) => (n.kind === "dir" ? [n.path, ...allFolders(n.children)] : []));
+}
+
+/** Entry paths in display order, skipping the contents of `collapsed` folders. */
+function entryPaths(nodes: TreeNode[], collapsed: ReadonlySet<string> = new Set()): string[] {
+  return nodes.flatMap((n) =>
+    n.kind === "file"
+      ? [n.path]
+      : [n.path, ...(collapsed.has(n.path) ? [] : entryPaths(n.children, collapsed))],
+  );
 }
 
 function buildTree(files: DocFile[], folders: string[]): TreeNode[] {
@@ -217,6 +229,21 @@ function canMove(item: Entry, dir: string) {
   return item.kind === "file" || !(dir === item.path || isInFolder(dir, item.path));
 }
 
+/** Some item moves and none would land inside itself; items already in `dir` stay. */
+function canMoveAll(items: Entry[], dir: string) {
+  return (
+    items.some((i) => canMove(i, dir)) &&
+    items.every((i) => parentDir(i.path) === dir || canMove(i, dir))
+  );
+}
+
+function containsMain(items: Entry[], mainPath: string | null) {
+  if (mainPath === null) return false;
+  return items.some(
+    (i) => i.path === mainPath || (i.kind === "folder" && isInFolder(mainPath, i.path)),
+  );
+}
+
 const HIDE_REFERENCE_HINT = "hide-reference-hint";
 
 function referenceHintHidden() {
@@ -247,18 +274,28 @@ export function FileTree({
 }: FileTreeProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [dropDir, setDropDir] = useState<string | null>(null);
-  const dragged = useRef<Entry | null>(null);
+  const dragged = useRef<Entry[] | null>(null);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const anchor = useRef<string | null>(null);
   const [referenceHint, setReferenceHint] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuTarget, setMenuTarget] = useState<MenuTarget>({ kind: "root" });
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadDir = useRef("");
   const [editingState, setEditing] = useState<Editing | null>(null);
-  const [deletingState, setDeleting] = useState<Deleting | null>(null);
+  const [deletingState, setDeleting] = useState<Entry[] | null>(null);
   const editing = readOnly ? null : editingState;
   const deleting = readOnly ? null : deletingState;
   const tree = buildTree(project.files, project.folders);
   const mainPath = project.files.find((f) => f.id === project.mainId)?.path ?? null;
+  const activePath = project.files.find((f) => f.id === activeId)?.path ?? null;
+  /** selected entries that still exist, without those inside a selected folder */
+  const selection = readOnly
+    ? []
+    : entryPaths(tree)
+        .filter((p) => selected.has(p))
+        .filter((p, _, all) => !all.some((dir) => isInFolder(p, dir)))
+        .map(entryAt);
 
   function toggle(path: string) {
     setCollapsed((prev) => {
@@ -293,13 +330,51 @@ export function FileTree({
     if (!referenceHintHidden()) setReferenceHint(true);
   }
 
+  function entryAt(path: string): Entry {
+    const file = project.files.find((f) => f.path === path);
+    return file ? { kind: "file", id: file.id, path } : { kind: "folder", path };
+  }
+
+  const inSelection = (item: Entry) => selection.length > 1 && selected.has(item.path);
+
+  /** A row's actions apply to the whole selection when the row is part of it. */
+  function targetFor(item: Entry): MenuTarget {
+    return inSelection(item) ? { kind: "selection", items: selection } : item;
+  }
+
   /** The row a right click or long press landed on; empty space is the root. */
   function targetOf(el: EventTarget | null): MenuTarget {
     const row = el instanceof Element ? el.closest<HTMLElement>("[data-entry]") : null;
     const path = row?.dataset.entry;
-    if (path === undefined) return { kind: "root" };
-    const file = project.files.find((f) => f.path === path);
-    return file ? { kind: "file", id: file.id, path } : { kind: "folder", path };
+    return path === undefined ? { kind: "root" } : targetFor(entryAt(path));
+  }
+
+  /**
+   * Ctrl/Cmd+click toggles a row, Shift+click selects the range from the last clicked row.
+   * Returns false for a plain click, which clears the selection.
+   */
+  function select(e: MouseEvent, path: string) {
+    if (readOnly) return false;
+    const from = anchor.current ?? activePath;
+    if (e.shiftKey && from !== null) {
+      const order = entryPaths(tree, collapsed);
+      const [a, b] = [order.indexOf(from), order.indexOf(path)];
+      if (a !== -1 && b !== -1) {
+        setSelected(new Set(order.slice(Math.min(a, b), Math.max(a, b) + 1)));
+        return true;
+      }
+    }
+    anchor.current = path;
+    if (e.ctrlKey || e.metaKey) {
+      setSelected((prev) => {
+        const next = new Set(prev.size > 0 || from === null ? prev : [from]);
+        if (!next.delete(path)) next.add(path);
+        return next;
+      });
+      return true;
+    }
+    setSelected(new Set());
+    return false;
   }
 
   function dragProps(item: Entry) {
@@ -307,9 +382,13 @@ export function FileTree({
     return {
       draggable: true,
       onDragStart: (e: DragEvent) => {
-        dragged.current = item;
+        if (inSelection(item)) dragged.current = selection;
+        else {
+          dragged.current = [item];
+          setSelected(new Set());
+        }
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", item.path);
+        e.dataTransfer.setData("text/plain", dragged.current.map((i) => i.path).join("\n"));
       },
       onDragEnd: () => {
         dragged.current = null;
@@ -322,7 +401,7 @@ export function FileTree({
     if (readOnly) return;
     const dir = dropTarget(e);
     if (dragged.current) {
-      if (!canMove(dragged.current, dir)) return setDropDir(null);
+      if (!canMoveAll(dragged.current, dir)) return setDropDir(null);
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       setDropDir(dir);
@@ -333,43 +412,42 @@ export function FileTree({
     }
   }
 
-  function move(item: Entry, dir: string) {
-    const to = dir ? `${dir}/${baseName(item.path)}` : baseName(item.path);
-    const error =
-      item.kind === "file"
-        ? attempt(
-            () => project.validatePath(to, item.id),
-            () => project.rename(item.id, to),
-          )
-        : attempt(
-            () => project.validateFolderRename(item.path, to),
-            () => project.renameFolder(item.path, to),
-          );
-    if (error) return upload.report(`Couldn't move ${item.path}: ${error}`);
+  function moveAll(items: Entry[], dir: string) {
+    let moved = false;
+    for (const item of items.filter((i) => canMove(i, dir))) {
+      const to = dir ? `${dir}/${baseName(item.path)}` : baseName(item.path);
+      const error =
+        item.kind === "file"
+          ? attempt(
+              () => project.validatePath(to, item.id),
+              () => project.rename(item.id, to),
+            )
+          : attempt(
+              () => project.validateFolderRename(item.path, to),
+              () => project.renameFolder(item.path, to),
+            );
+      if (error) upload.report(`Couldn't move ${item.path}: ${error}`);
+      else moved = true;
+    }
+    setSelected(new Set());
+    if (!moved) return;
     expand(dir);
     remindReferences();
   }
 
   function onDrop(e: DragEvent) {
     setDropDir(null);
-    const item = dragged.current;
+    const items = dragged.current;
     dragged.current = null;
-    if (item) {
+    if (items) {
       e.preventDefault();
-      if (!readOnly && canMove(item, dropTarget(e))) move(item, dropTarget(e));
+      if (!readOnly && canMoveAll(items, dropTarget(e))) moveAll(items, dropTarget(e));
       return;
     }
     if (!hasFiles(e)) return;
     e.preventDefault();
     if (readOnly) return;
-    const dir = dropTarget(e);
-    fromDataTransfer(e.dataTransfer)
-      .then((raw) => upload.start(raw, dir))
-      .catch((err: unknown) =>
-        upload.report(
-          `Couldn't read dropped files: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
+    upload.drop(e.dataTransfer, dropTarget(e));
   }
 
   function startCreate(kind: "create" | "create-folder", dir: string) {
@@ -390,11 +468,30 @@ export function FileTree({
     return null;
   }
 
+  /** Delete (Cmd+Backspace on a Mac) asks to delete the selection, or else the focused row. */
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key === "Escape") return setSelected(new Set());
+    const isDelete = e.key === "Delete" || (e.key === "Backspace" && e.metaKey);
+    if (!isDelete || readOnly || editing || e.target instanceof HTMLInputElement) return;
+    const row = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-entry]") : null;
+    const focused = row?.dataset.entry;
+    const items = selection.length > 0 ? selection : focused ? [entryAt(focused)] : [];
+    if (items.length === 0) return;
+    e.preventDefault();
+    if (containsMain(items, mainPath)) {
+      return upload.report("Can't delete the main file, choose another main file first");
+    }
+    setDeleting(items);
+  }
+
   function confirmDelete() {
     if (!deleting || readOnly) return;
-    if (deleting.kind === "file") project.remove(deleting.id);
-    else project.removeFolder(deleting.path);
+    for (const item of deleting) {
+      if (item.kind === "file") project.remove(item.id);
+      else project.removeFolder(item.path);
+    }
     setDeleting(null);
+    setSelected(new Set());
   }
 
   function renderCreate(dir: string, depth: number) {
@@ -420,19 +517,19 @@ export function FileTree({
     );
   }
 
-  function renderMoveTo(entry: Entry) {
+  function renderMoveTo(items: Entry[], label = "Move to…") {
     return (
       <DropdownMenuSub>
         <DropdownMenuSubTrigger>
           <HugeiconsIcon icon={FolderMoveToIcon} />
-          Move to…
+          {label}
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
           {["", ...allFolders(tree)].map((dir) => (
             <DropdownMenuItem
               key={dir}
-              disabled={!canMove(entry, dir)}
-              onClick={() => move(entry, dir)}
+              disabled={!canMoveAll(items, dir)}
+              onClick={() => moveAll(items, dir)}
             >
               <HugeiconsIcon icon={Folder01Icon} />
               <span className="truncate">{dir || "Project root"}</span>
@@ -444,6 +541,26 @@ export function FileTree({
   }
 
   function menuItems(target: MenuTarget) {
+    if (target.kind === "selection") {
+      const hasMain = containsMain(target.items, mainPath);
+      const count = `${target.items.length} items`;
+      return (
+        <>
+          {renderMoveTo(target.items, `Move ${count} to…`)}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={hasMain}
+            title={hasMain ? "Includes the main file" : undefined}
+            onClick={() => setDeleting(target.items)}
+          >
+            <HugeiconsIcon icon={Delete02Icon} />
+            Delete {count}
+            <DropdownMenuShortcut>Del</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        </>
+      );
+    }
     if (target.kind === "root") {
       return (
         <>
@@ -485,16 +602,17 @@ export function FileTree({
             <HugeiconsIcon icon={PencilEdit01Icon} />
             Rename
           </DropdownMenuItem>
-          {renderMoveTo(target)}
+          {renderMoveTo([target])}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
             disabled={hasMain}
             title={hasMain ? "Contains the main file" : undefined}
-            onClick={() => setDeleting({ kind: "folder", path: target.path })}
+            onClick={() => setDeleting([target])}
           >
             <HugeiconsIcon icon={Delete02Icon} />
             Delete folder
+            <DropdownMenuShortcut>Del</DropdownMenuShortcut>
           </DropdownMenuItem>
         </>
       );
@@ -508,7 +626,7 @@ export function FileTree({
           <HugeiconsIcon icon={PencilEdit01Icon} />
           Rename
         </DropdownMenuItem>
-        {renderMoveTo(target)}
+        {renderMoveTo([target])}
         {isTexFile(target.path) && !isMain && (
           <DropdownMenuItem onClick={() => project.setMain(target.id)}>
             <HugeiconsIcon icon={StarIcon} />
@@ -520,10 +638,11 @@ export function FileTree({
           variant="destructive"
           disabled={isMain}
           title={isMain ? "Choose another main file first" : undefined}
-          onClick={() => setDeleting({ kind: "file", id: target.id, path: target.path })}
+          onClick={() => setDeleting([target])}
         >
           <HugeiconsIcon icon={Delete02Icon} />
           Delete
+          <DropdownMenuShortcut>Del</DropdownMenuShortcut>
         </DropdownMenuItem>
       </>
     );
@@ -565,14 +684,19 @@ export function FileTree({
         )}
       >
         <div
-          className="group/row flex items-center rounded-md hover:bg-muted"
+          className={cn(
+            "group/row flex items-center rounded-md select-none hover:bg-muted",
+            selected.has(node.path) && "bg-primary/10 hover:bg-primary/15",
+          )}
           data-dir={node.path}
           data-entry={node.path}
           {...dragProps({ kind: "folder", path: node.path })}
         >
           <button
             type="button"
-            onClick={() => toggle(node.path)}
+            onClick={(e) => {
+              if (!select(e, node.path)) toggle(node.path);
+            }}
             className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left"
             style={indent(depth)}
           >
@@ -583,7 +707,9 @@ export function FileTree({
             <HugeiconsIcon icon={Folder01Icon} className="size-4 shrink-0 text-muted-foreground" />
             <span className="truncate">{node.name}</span>
           </button>
-          {!readOnly && <RowMenu>{menuItems({ kind: "folder", path: node.path })}</RowMenu>}
+          {!readOnly && (
+            <RowMenu>{menuItems(targetFor({ kind: "folder", path: node.path }))}</RowMenu>
+          )}
         </div>
         {open && (
           <>
@@ -624,13 +750,16 @@ export function FileTree({
         data-entry={file.path}
         {...dragProps({ kind: "file", id: file.id, path: file.path })}
         className={cn(
-          "group/row flex items-center rounded-md hover:bg-muted",
+          "group/row flex items-center rounded-md select-none hover:bg-muted",
           file.id === activeId && "bg-muted font-medium",
+          selected.has(file.path) && "bg-primary/10 hover:bg-primary/15",
         )}
       >
         <button
           type="button"
-          onClick={() => onOpen(file.id)}
+          onClick={(e) => {
+            if (!select(e, file.path)) onOpen(file.id);
+          }}
           className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left"
           style={{ paddingLeft: indent(depth).paddingLeft + 20 }}
         >
@@ -655,7 +784,7 @@ export function FileTree({
           </span>
         </button>
         {!readOnly && (
-          <RowMenu>{menuItems({ kind: "file", id: file.id, path: file.path })}</RowMenu>
+          <RowMenu>{menuItems(targetFor({ kind: "file", id: file.id, path: file.path }))}</RowMenu>
         )}
       </div>
     );
@@ -683,6 +812,7 @@ export function FileTree({
         }}
       >
         <ContextMenuTrigger
+          data-file-tree-drop=""
           className={cn(
             "min-h-0 flex-1 overflow-y-auto p-1",
             dropDir === "" && "bg-primary/5 ring-2 ring-primary/40 ring-inset",
@@ -692,6 +822,12 @@ export function FileTree({
             e.preventBaseUIHandler();
             e.stopPropagation();
           }}
+          onClick={(e) => {
+            const target = e.target instanceof Node ? e.target : null;
+            const onRow = target instanceof Element && target.closest("[data-entry]") !== null;
+            if (target && e.currentTarget.contains(target) && !onRow) setSelected(new Set());
+          }}
+          onKeyDown={onKeyDown}
           onDragOver={onDragOver}
           onDragLeave={(e) => {
             const inside =
@@ -793,16 +929,34 @@ export function FileTree({
 
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent size="sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete {deleting?.kind === "folder" ? "folder" : "file"}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              <span className="font-mono break-all">{deleting?.path}</span>
-              {deleting?.kind === "folder" && " and everything in it"} will be deleted for all
-              collaborators.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+          {deleting?.length === 1 ? (
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Delete {deleting[0].kind === "folder" ? "folder" : "file"}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                <span className="font-mono break-all">{deleting[0].path}</span>
+                {deleting[0].kind === "folder" && " and everything in it"} will be deleted for all
+                collaborators.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+          ) : (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {deleting?.length} items?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  These
+                  {deleting?.some((i) => i.kind === "folder") && ", with everything in them,"} will
+                  be deleted for all collaborators:
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <ul className="max-h-40 overflow-y-auto font-mono text-xs break-all">
+                {deleting?.map((i) => (
+                  <li key={i.path}>{i.kind === "folder" ? `${i.path}/` : i.path}</li>
+                ))}
+              </ul>
+            </>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={confirmDelete}>

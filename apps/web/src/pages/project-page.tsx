@@ -12,6 +12,7 @@ import { CollabStatus } from "@/features/editor/collab-status";
 import { CompileErrors } from "@/features/compile/compile-errors";
 import { CompileStatus } from "@/features/compile/compile-status";
 import { BlobViewer } from "@/features/files/blob-viewer";
+import { FileDropZone } from "@/features/files/file-drop-zone";
 import type { FileTreeHandle } from "@/features/files/file-tree";
 import { LatexEditor, type Reveal } from "@/features/editor/latex-editor";
 import { PdfViewer } from "@/features/compile/pdf-viewer";
@@ -430,7 +431,14 @@ function ProjectEditor({
   );
 
   return (
-    <div className="flex h-dvh flex-col">
+    <FileDropZone
+      readOnly={readOnly}
+      onDrop={(dt) => {
+        upload.drop(dt, "");
+        sidebar.show("files");
+      }}
+      className="flex h-dvh flex-col"
+    >
       <AppHeader>
         <svg
           aria-hidden
@@ -554,6 +562,6 @@ function ProjectEditor({
           </ResizablePanelGroup>
         </div>
       )}
-    </div>
+    </FileDropZone>
   );
 }
