@@ -15,12 +15,21 @@ export function fromFileList(files: FileList | File[]): RawUpload[] {
   return [...files].map((f) => ({ path: f.name, data: f }));
 }
 
+/** Chrome does not expose the FileSystem*Entry interfaces as globals, so `instanceof` throws there. */
+function isFileEntry(entry: FileSystemEntry): entry is FileSystemFileEntry {
+  return entry.isFile;
+}
+
+function isDirectoryEntry(entry: FileSystemEntry): entry is FileSystemDirectoryEntry {
+  return entry.isDirectory;
+}
+
 async function readEntry(entry: FileSystemEntry, prefix: string): Promise<RawUpload[]> {
-  if (entry instanceof FileSystemFileEntry) {
+  if (isFileEntry(entry)) {
     const file = await new Promise<File>((resolve, reject) => entry.file(resolve, reject));
     return [{ path: prefix + entry.name, data: file }];
   }
-  if (!(entry instanceof FileSystemDirectoryEntry)) return [];
+  if (!isDirectoryEntry(entry)) return [];
   const reader = entry.createReader();
   const children: FileSystemEntry[] = [];
   for (;;) {
