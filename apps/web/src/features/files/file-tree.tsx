@@ -54,7 +54,7 @@ import type { Peer } from "@/features/editor/use-collab";
 import type { ProjectFiles } from "@/features/files/use-project-files";
 import type { useUpload } from "@/features/files/use-upload";
 import { previewType } from "@/features/files/mime";
-import { fromDataTransfer, fromFileList } from "@/features/files/upload-sources";
+import { fromFileList } from "@/features/files/upload-sources";
 
 type FileTreeProps = {
   project: ProjectFiles;
@@ -73,6 +73,9 @@ export interface FileTreeHandle {
   startCreate: (kind: "create" | "create-folder") => void;
   pickFiles: () => void;
 }
+
+/** The tree's drop area, where a drop lands in the folder under the pointer. */
+export const FILE_TREE_DROP = "[data-file-tree-drop]";
 
 type DirNode = { kind: "dir"; name: string; path: string; children: TreeNode[] };
 type FileNode = { kind: "file"; name: string; path: string; file: DocFile };
@@ -362,14 +365,7 @@ export function FileTree({
     if (!hasFiles(e)) return;
     e.preventDefault();
     if (readOnly) return;
-    const dir = dropTarget(e);
-    fromDataTransfer(e.dataTransfer)
-      .then((raw) => upload.start(raw, dir))
-      .catch((err: unknown) =>
-        upload.report(
-          `Couldn't read dropped files: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
+    upload.drop(e.dataTransfer, dropTarget(e));
   }
 
   function startCreate(kind: "create" | "create-folder", dir: string) {
@@ -683,6 +679,7 @@ export function FileTree({
         }}
       >
         <ContextMenuTrigger
+          data-file-tree-drop=""
           className={cn(
             "min-h-0 flex-1 overflow-y-auto p-1",
             dropDir === "" && "bg-primary/5 ring-2 ring-primary/40 ring-inset",

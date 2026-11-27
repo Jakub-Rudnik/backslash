@@ -13,7 +13,12 @@ import { useRef, useState } from "react";
 import type { ProjectFiles } from "@/features/files/use-project-files";
 import { uploadBlob } from "@/lib/api";
 import { formatSize } from "@/features/files/mime";
-import { fromZip, isIgnored, type RawUpload } from "@/features/files/upload-sources";
+import {
+  fromDataTransfer,
+  fromZip,
+  isIgnored,
+  type RawUpload,
+} from "@/features/files/upload-sources";
 
 type Item = { path: string; data: Blob };
 
@@ -173,6 +178,12 @@ export function useUpload(
 
   return {
     start,
+    /** uploads the files and folders of a drop; call it synchronously in the drop handler */
+    drop: (dt: DataTransfer, dir: string) => {
+      fromDataTransfer(dt)
+        .then((raw) => start(raw, dir))
+        .catch((err: unknown) => report(`Couldn't read dropped files: ${message(err)}`));
+    },
     busy: isBusy,
     /** files that would be overwritten; call confirm() or cancel() */
     replacing: pending?.replacing ?? null,
